@@ -6,7 +6,7 @@ import { z } from "zod";
 import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { apiKeys, apps, appVersions, charges, developers, installs, payouts, prices } from "@aix/db";
-import { encryptSecret, formatMoney, newId, randomToken } from "@aix/core";
+import { assertPublicUrl, encryptSecret, formatMoney, newId, randomToken } from "@aix/core";
 import { sha256, slugify, unpackFiles, validateManifest } from "@aix/manifest";
 import type { App, Deps } from "../context.js";
 import { API_KEY_SCOPES, generateApiKey, getUser, requireDeveloperKey, requireSessionUser, type ApiKeyScope } from "../lib/auth.js";
@@ -106,6 +106,9 @@ export async function developerRoutes(app: App, deps: Deps) {
       return { ok: true };
     }
     if (!deps.config.AIX_ENCRYPTION_KEY) throw new ApiError(503, "payments_unavailable", "set AIX_ENCRYPTION_KEY in .env to enable webhooks");
+    await assertPublicUrl(req.body.url, { allowInsecureLocal: deps.config.NODE_ENV !== "production" }).catch((e) => {
+      throw badRequest(`webhook URL rejected: ${e.message}`);
+    });
     const secret = `whsec_aix_${randomToken(24)}`;
     await deps.db.update(developers).set({ webhookUrl: req.body.url, webhookSecretEnc: encryptSecret(secret, deps.config.AIX_ENCRYPTION_KEY) }).where(eq(developers.id, developer.id));
     return { url: req.body.url, secret };
@@ -129,6 +132,9 @@ export async function developerRoutes(app: App, deps: Deps) {
       const v = validateManifest(JSON.parse(manifestFile.content.toString("utf8")));
       if (!v.ok) throw badRequest("invalid aix.json", { errors: v.errors });
       const m = v.manifest!;
+      if (deps.config.NODE_ENV === "production" && [m.entry.mcp, m.entry.web, ...m.permissions.network].some((u) => u && !u.startsWith("https://"))) {
+        throw badRequest("production apps must use https URLs (localhost is for development only)");
+      }
       if (m.type === "prompt") {
         for (const s of m.skills ?? []) if (!files.some((f) => f.path === s)) throw badRequest(`skill file ${s} listed in aix.json is missing from the package`);
       }

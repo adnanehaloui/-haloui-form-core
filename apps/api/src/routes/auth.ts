@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { Google, generateCodeVerifier, generateState, decodeIdToken } from "arctic";
 import { authIdentities, magicLinkTokens, orgMembers, organizations, developers, users } from "@aix/db";
 import { newId, randomToken, sha256Hex } from "@aix/core";
@@ -26,6 +26,10 @@ export async function authRoutes(app: App, deps: Deps) {
       schema: { tags: ["auth"], body: z.object({ email: z.email(), redirectTo: z.string().optional() }), response: { 200: z.object({ ok: z.literal(true) }) } },
     },
     async (req) => {
+      // Per-email throttle (on top of per-IP): at most 3 links per address per 10 minutes. Always answer ok.
+      const email = normalizeEmail(req.body.email);
+      const [recent] = await deps.db.select({ n: sql<number>`count(*)::int` }).from(magicLinkTokens).where(and(eq(magicLinkTokens.email, email), gt(magicLinkTokens.createdAt, new Date(deps.now().getTime() - 10 * 60_000))));
+      if ((recent?.n ?? 0) >= 3) return { ok: true as const };
       const token = randomToken();
       await deps.db.insert(magicLinkTokens).values({
         id: sha256Hex(token),

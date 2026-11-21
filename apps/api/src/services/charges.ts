@@ -152,6 +152,9 @@ export async function hold(deps: Deps, developerId: string, input: HoldInput): P
 
   // Errors that must COMMIT their side effects (a new approval request) are returned, then thrown.
   const result = await deps.db.transaction(async (tx): Promise<Charge | { deferredError: ApiError }> => {
+    // Serialize all holds of this USER (across personal and org wallets) so per-user caps can't be raced,
+    // then the wallet itself so its balance can't be double-spent. Same lock order everywhere.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${"user:" + input.userId}))`);
     await lockAccount(tx, acct.available);
     const again = await findCharge(tx, app.id, input.idempotencyKey);
     if (again) return assertSameRequest(again, input, price.id);
@@ -169,16 +172,21 @@ export async function hold(deps: Deps, developerId: string, input: HoldInput): P
     const amountCents = price.kind === "free" || billableUnits === 0 ? 0 : multiplyCents(price.unitAmountCents, billableUnits);
 
     // Spend limits + approval.
-    const [approval] = await tx.select().from(approvalRequests).where(and(eq(approvalRequests.appId, app.id), eq(approvalRequests.idempotencyKey, input.idempotencyKey)));
+    // An approval belongs to one user, one price and one idempotency key — never reusable across users.
+    const [approval] = await tx
+      .select()
+      .from(approvalRequests)
+      .where(and(eq(approvalRequests.appId, app.id), eq(approvalRequests.userId, input.userId), eq(approvalRequests.idempotencyKey, input.idempotencyKey)));
+    const approvalMatches = approval && approval.priceId === price.id && approval.quantity === input.quantity;
     if (approval?.status === "denied") throw new ApiError(402, "needs_user_approval", "the user declined this charge", { approvalId: approval.id, status: "denied" });
-    const preApproved = approval?.status === "approved" && approval.amountCents >= amountCents && approval.expiresAt > now;
+    const preApproved = !!approvalMatches && approval!.status === "approved" && approval!.amountCents >= amountCents && approval!.expiresAt > now;
     const rules = await collectSpendRules(tx, { userId: input.userId, appId: app.id, orgId: install.orgId, now });
     const decision = evaluateSpend(amountCents, rules, { preApproved });
     if (decision.decision === "exceeded") {
       throw new ApiError(402, "spend_limit_exceeded", decision.reason, { rule: decision.rule, capCents: decision.capCents, spentCents: decision.spentCents });
     }
     if (decision.decision === "needs_approval") {
-      let a = approval && approval.status === "pending" && approval.expiresAt > now ? approval : null;
+      let a = approvalMatches && approval!.status === "pending" && approval!.expiresAt > now ? approval! : null;
       if (!a) {
         const id = newId("apr");
         const values = {
@@ -196,7 +204,7 @@ export async function hold(deps: Deps, developerId: string, input: HoldInput): P
         const inserted = await tx
           .insert(approvalRequests)
           .values(values)
-          .onConflictDoUpdate({ target: [approvalRequests.appId, approvalRequests.idempotencyKey], set: { ...values, id: sql`approval_requests.id`, decidedAt: null } })
+          .onConflictDoUpdate({ target: [approvalRequests.appId, approvalRequests.userId, approvalRequests.idempotencyKey], set: { ...values, id: sql`approval_requests.id`, decidedAt: null } })
           .returning();
         a = inserted[0] ?? null;
       }

@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { developers } from "@aix/db";
-import { decryptSecret, newId, signWebhook } from "@aix/core";
+import { assertPublicUrl, decryptSecret, newId, signWebhook } from "@aix/core";
 import type { Deps } from "../context.js";
 
 const RETRY_DELAYS_MS = [0, 1_000, 5_000, 30_000];
@@ -19,7 +19,10 @@ export function notifyDeveloper(deps: Deps, developerId: string, type: string, d
     for (const delay of delays) {
       if (delay) await new Promise((r) => setTimeout(r, delay));
       try {
+        // Re-check at send time (DNS may have changed since the URL was saved).
+        await assertPublicUrl(dev.webhookUrl, { allowInsecureLocal: deps.config.NODE_ENV !== "production" });
         const res = await fetch(dev.webhookUrl, {
+          redirect: "error",
           method: "POST",
           headers: { "content-type": "application/json", "aix-signature": signWebhook(body, secret) },
           body,

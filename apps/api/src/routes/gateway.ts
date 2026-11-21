@@ -5,7 +5,7 @@
 import { z } from "zod";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { apps, appVersions, charges, gatewayPending, installs } from "@aix/db";
-import { decryptSecret, encryptSecret, newId, randomToken, safeEqual, sha256Hex } from "@aix/core";
+import { decryptSecret, encryptSecret, newId, randomToken, sha256Hex } from "@aix/core";
 import { lt } from "drizzle-orm";
 import type { Manifest } from "@aix/manifest";
 import type { App, Deps } from "../context.js";
@@ -26,6 +26,20 @@ const unseal = (deps: D, v: string | null) => {
   if (v === null) return null;
   return JSON.parse(v.startsWith("v1.") && deps.config.AIX_ENCRYPTION_KEY ? decryptSecret(v, deps.config.AIX_ENCRYPTION_KEY) : v);
 };
+
+/**
+ * Consume a panel nonce exactly once (atomic delete). Returns the stored payload, or throws 403.
+ * Used by the approval decision and install endpoints when the caller is the gateway (token auth).
+ */
+export async function consumePending(deps: D, userId: string, kind: "approval" | "install", ref: string, nonce: string | undefined) {
+  if (!nonce) throw new ApiError(403, "forbidden", "this action must be confirmed from its panel (missing nonce)");
+  const [row] = await deps.db
+    .delete(gatewayPending)
+    .where(and(eq(gatewayPending.userId, userId), eq(gatewayPending.kind, kind), eq(gatewayPending.ref, ref), eq(gatewayPending.nonceHash, sha256Hex(nonce)), sql`${gatewayPending.expiresAt} > now()`))
+    .returning();
+  if (!row) throw new ApiError(403, "forbidden", "invalid or expired panel action");
+  return unseal(deps, row.payload);
+}
 
 /** Job helper: drop expired pending gateway actions. */
 export async function purgeGatewayPending(deps: D) {
@@ -56,23 +70,6 @@ export async function gatewayRoutes(app: App, deps: Deps) {
         .values({ id: newId("gwp"), userId: u.userId, kind: req.body.kind, ref: req.body.ref, payload: seal(deps, req.body.payload), nonceHash: sha256Hex(nonce), expiresAt })
         .onConflictDoUpdate({ target: [gatewayPending.userId, gatewayPending.kind, gatewayPending.ref], set: { payload: seal(deps, req.body.payload), nonceHash: sha256Hex(nonce), expiresAt } });
       return { nonce, expiresAt };
-    },
-  );
-
-  /** Consume a nonce exactly once; returns the stored payload and deletes the row. */
-  app.post(
-    "/gateway/pending/consume",
-    { schema: { tags: ["gateway"], body: z.object({ kind: z.enum(["approval", "install"]), ref: z.string().max(200), nonce: z.string().max(200) }) } },
-    async (req) => {
-      const u = await requireUser(deps, req);
-      const [row] = await deps.db
-        .select()
-        .from(gatewayPending)
-        .where(and(eq(gatewayPending.userId, u.userId), eq(gatewayPending.kind, req.body.kind), eq(gatewayPending.ref, req.body.ref)));
-      if (!row || row.expiresAt < deps.now() || !safeEqual(row.nonceHash, sha256Hex(req.body.nonce))) throw new ApiError(403, "forbidden", "invalid or expired panel action");
-      const del = await deps.db.delete(gatewayPending).where(and(eq(gatewayPending.id, row.id), eq(gatewayPending.nonceHash, row.nonceHash))).returning();
-      if (!del.length) throw new ApiError(403, "forbidden", "already used");
-      return { payload: unseal(deps, row.payload) };
     },
   );
 

@@ -31,22 +31,27 @@ export async function refundTopUp(deps: Deps, topupId: string, amountCents: numb
   });
 
   const { topup } = reserved;
+  let r: { id: string; status: string };
   try {
-    const r = await deps.payments.refundPayment({ paymentIntentId: topup.paymentIntentId!, amountCents, idempotencyKey: reserved.idempotencyKey, reason, topupId: topup.id });
-    await deps.db.transaction(async (tx) => {
-      await postTransaction(tx, postCardRefundSettled({ refundsPayable: PLATFORM.refunds, clearing: PLATFORM.clearing }, amountCents, topup.currency as Currency), { externalRef: r.id, description: "Refund sent to card" });
-      await audit(tx, { actorUserId, actorType: "admin", action: "wallet.refunded_to_card", targetType: "topup", targetId: topup.id, metadata: { amountCents, refundId: r.id, reason } });
-    });
-    await emailRefund(deps, topup.walletId, amountCents, "card_refund");
-    return { refundId: r.id, status: r.status, amountCents };
+    r = await deps.payments.refundPayment({ paymentIntentId: topup.paymentIntentId!, amountCents, idempotencyKey: reserved.idempotencyKey, reason, topupId: topup.id });
   } catch (e: any) {
-    // Stripe refused: undo the reservation so the money is spendable again.
+    // Only when STRIPE refused do we undo the reservation (money never left).
     await deps.db.transaction(async (tx) => {
       await postTransaction(tx, { ...postCardRefundRequested({ walletAvailable: PLATFORM.refunds, refundsPayable: walletAccountIds(topup.walletId).available }, amountCents, topup.currency as Currency) }, { externalRef: `refund-undo:${topup.id}:${topup.refundedCents}`, description: "Refund to card failed — returned" });
       await tx.update(topups).set({ refundedCents: sql`${topups.refundedCents} - ${amountCents}` }).where(eq(topups.id, topup.id));
     });
     throw new ApiError(502, "payments_unavailable", `Stripe refused the refund: ${e.message}`);
   }
+  {
+    // Stripe accepted: settle. If this fails, the refund is still real — never re-credit the wallet here;
+    // the reservation stays in refunds_payable and is visible on the metrics/ledger for follow-up.
+    await deps.db.transaction(async (tx) => {
+      await postTransaction(tx, postCardRefundSettled({ refundsPayable: PLATFORM.refunds, clearing: PLATFORM.clearing }, amountCents, topup.currency as Currency), { externalRef: r.id, description: "Refund sent to card" });
+      await audit(tx, { actorUserId, actorType: "admin", action: "wallet.refunded_to_card", targetType: "topup", targetId: topup.id, metadata: { amountCents, refundId: r.id, reason } });
+    });
+  }
+  await emailRefund(deps, topup.walletId, amountCents, "card_refund").catch(() => {});
+  return { refundId: r.id, status: r.status, amountCents };
 }
 
 export async function listTopUps(deps: Deps, walletId: string) {

@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
+import { assertPublicUrl } from "@aix/core";
 import { AixApi, AixApiError } from "./api-client.js";
 import type { GatewayConfig } from "./config.js";
 import { approvalPanel, installPanel, PANELS, walletPanel } from "./panels.js";
@@ -29,7 +30,14 @@ export function resetGatewayState() {
 
 // ---- Downstream MCP ---------------------------------------------------------------------------
 
+let blockPrivate = false;
+export function setBlockPrivateUrls(v: boolean) {
+  blockPrivate = v;
+}
+
 async function withDownstream<T>(url: string, headers: Record<string, string>, fn: (c: Client) => Promise<T>): Promise<T> {
+  // In production, never let an app's manifest point the gateway at internal services (SSRF).
+  if (blockPrivate) await assertPublicUrl(url);
   const client = new Client({ name: "aix-gateway", version: "0.1.0" });
   const transport = new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } });
   await client.connect(transport);
@@ -74,7 +82,8 @@ const BUILTIN_TOOLS: Tool[] = [
     title: "Install an app",
     description: "Show an app's permissions and price so the user can install it. Installation needs the user's click.",
     inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"] },
-    _meta: { ui: { resourceUri: PANELS.install } },
+    // Model-only: an app's own panel must never be able to obtain an install nonce.
+    _meta: { ui: { resourceUri: PANELS.install, visibility: ["model"] } },
   },
   {
     name: "wallet_balance",
@@ -89,7 +98,8 @@ const BUILTIN_TOOLS: Tool[] = [
     title: "Ask the user to approve a charge",
     description: "When an app says a charge needs approval, call this with the approvalId to show the approval panel to the user. This does NOT approve anything by itself.",
     inputSchema: { type: "object", properties: { approvalId: { type: "string" } }, required: ["approvalId"] },
-    _meta: { ui: { resourceUri: PANELS.approval } },
+    // Model-only: a (malicious) app panel can't fetch the approval nonce and approve its own charge.
+    _meta: { ui: { resourceUri: PANELS.approval, visibility: ["model"] } },
   },
   {
     name: "approval_decide",
@@ -110,7 +120,8 @@ const BUILTIN_TOOLS: Tool[] = [
 export interface UserContext { userId: string; accessToken: string }
 
 export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
-  const api = new AixApi(cfg.apiUrl, user.accessToken);
+  setBlockPrivateUrls(!!cfg.blockPrivateUrls);
+  const api = new AixApi(cfg.apiUrl, user.accessToken, cfg.serviceSecret);
   const webUrl = cfg.apiUrl; // fallback only; /me returns the real web URL
   const server = new Server(
     { name: "aix", title: "AIX — AI app store", version: "0.1.0" },
@@ -286,11 +297,12 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
         }
         case "app_install_confirm": {
           try {
-            await api.post("/gateway/pending/consume", { kind: "install", ref: String(args.slug), nonce: String(args.nonce) });
-          } catch {
-            return errorResult("This install request expired or can only be confirmed from its panel — run app_install again.");
+            // The API checks and consumes the panel nonce in the same request.
+            await api.post(`/store/apps/${encodeURIComponent(String(args.slug))}/install`, { acceptPermissions: true, nonce: String(args.nonce ?? "") });
+          } catch (e) {
+            if (e instanceof AixApiError && e.status === 403) return errorResult("This install request expired or can only be confirmed from its panel — run app_install again.");
+            throw e;
           }
-          await api.post(`/store/apps/${encodeURIComponent(String(args.slug))}/install`, { acceptPermissions: true });
           toolCache.clear();
           return { content: [text(`Installed ${args.slug}. Its tools are now available as ${args.slug}${SEP}<tool>.`)] };
         }
@@ -315,14 +327,16 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
           };
         }
         case "approval_decide": {
-          let p: PendingCall;
-          try {
-            p = (await api.post<{ payload: PendingCall }>("/gateway/pending/consume", { kind: "approval", ref: String(args.approvalId), nonce: String(args.nonce) })).payload;
-          } catch {
-            return errorResult("This approval can only be decided from its approval panel, or on the AIX website.");
-          }
           const decision = args.decision === "approve" ? "approve" : "deny";
-          await api.post(`/approvals/${encodeURIComponent(String(args.approvalId))}/decision`, { decision });
+          let p: PendingCall | null;
+          try {
+            // The API verifies + consumes the nonce atomically and returns the original call to re-run.
+            p = (await api.post<{ gatewayCall: PendingCall | null }>(`/approvals/${encodeURIComponent(String(args.approvalId))}/decision`, { decision, nonce: String(args.nonce ?? "") })).gatewayCall;
+          } catch (e) {
+            if (e instanceof AixApiError && e.status === 403) return errorResult("This approval can only be decided from its approval panel, or on the AIX website.");
+            throw e;
+          }
+          if (!p) return errorResult("This approval has no pending call to resume — run the tool again.");
           if (decision === "deny") return { content: [text("Charge declined. Nothing was charged.")], structuredContent: { status: "denied" } };
           // Re-run the original call with the SAME run id → same idempotency key → the approved charge.
           const r = await callAppTool(p.slug, p.tool, p.args, p.runId);

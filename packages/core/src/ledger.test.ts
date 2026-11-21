@@ -187,3 +187,19 @@ describe("crypto helpers", () => {
     expect(redact("key sk_test_123 and Bearer abc.def")).toBe("key sk_[REDACTED] and Bearer [REDACTED]");
   });
 });
+
+import { assertPublicUrl, isPrivateAddress } from "./net.js";
+describe("SSRF guard", () => {
+  it("classifies private addresses", () => {
+    for (const ip of ["127.0.0.1", "10.1.2.3", "172.20.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1"]) expect(isPrivateAddress(ip), ip).toBe(true);
+    for (const ip of ["8.8.8.8", "1.1.1.1", "172.32.0.1", "2606:4700::1111"]) expect(isPrivateAddress(ip), ip).toBe(false);
+  });
+  it("rejects http, credentials and private literal hosts", async () => {
+    await expect(assertPublicUrl("http://example.com/x")).rejects.toThrow(/https/);
+    await expect(assertPublicUrl("https://169.254.169.254/latest/meta-data")).rejects.toThrow(/private/);
+    await expect(assertPublicUrl("https://[::1]/")).rejects.toThrow(/private/);
+    await expect(assertPublicUrl("https://user:pw@1.1.1.1/")).rejects.toThrow(/credentials/);
+    await expect(assertPublicUrl("https://1.1.1.1/hook")).resolves.toBeInstanceOf(URL);
+    await expect(assertPublicUrl("http://localhost:3000/cb", { allowInsecureLocal: true })).resolves.toBeInstanceOf(URL);
+  });
+});

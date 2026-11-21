@@ -43,6 +43,13 @@
       "when": 1795264433376,
       "tag": "0005_tx_kinds_dispute",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795265637685,
+      "tag": "0006_approvals_per_user",
+      "breakpoints": true
     }
   ]
 }

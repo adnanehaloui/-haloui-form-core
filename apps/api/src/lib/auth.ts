@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { apiKeys, developers, orgMembers, sessions, users } from "@aix/db";
-import { newId, randomToken, sha256Hex } from "@aix/core";
+import { newId, randomToken, safeEqual, sha256Hex } from "@aix/core";
 import type { Deps } from "../context.js";
 import { ApiError, forbidden, unauthorized } from "./errors.js";
 
@@ -57,6 +57,14 @@ export async function getUser(deps: Deps, req: FastifyRequest): Promise<UserAuth
   let result: UserAuth | null = null;
   const token = bearer(req);
   if (token && !token.startsWith("aixsk_")) {
+    // OAuth access tokens (audience: the gateway) are only honoured when the call comes from the AIX
+    // gateway itself — never directly from an AI host or any other client holding the token.
+    const secret = deps.config.AIX_GATEWAY_SERVICE_SECRET;
+    const given = req.headers["x-aix-gateway-secret"];
+    if (secret && (typeof given !== "string" || !safeEqual(given, secret))) {
+      (req as any)._aixUser = null;
+      return null;
+    }
     try {
       const p = await deps.signer.verifyJwt(token, { audience: [`${deps.config.AIX_GATEWAY_URL.replace(/\/$/, "")}/mcp`, deps.config.AIX_GATEWAY_URL, deps.config.AIX_API_URL], issuer: deps.config.AIX_API_URL });
       const scopes = String(p.scope ?? "").split(" ").filter(Boolean);

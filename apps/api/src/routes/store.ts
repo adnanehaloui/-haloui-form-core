@@ -9,6 +9,7 @@ import { ApiError, badRequest, conflict, forbidden, notFound } from "../lib/erro
 import { PaymentsUnavailableError } from "../lib/payments.js";
 import { audit } from "../services/audit.js";
 import { checkAppAllowedForUser } from "../services/policies.js";
+import { consumePending } from "./gateway.js";
 import { getOrCreateUserWallet } from "../services/wallets.js";
 
 type PriceRow = typeof prices.$inferSelect;
@@ -291,9 +292,11 @@ export async function storeRoutes(app: App, deps: Deps) {
 
   app.post(
     "/store/apps/:slug/install",
-    { schema: { tags: ["store"], params: z.object({ slug: z.string() }), body: z.object({ acceptPermissions: z.literal(true), orgId: z.string().optional() }) } },
+    { schema: { tags: ["store"], params: z.object({ slug: z.string() }), body: z.object({ acceptPermissions: z.literal(true), orgId: z.string().optional(), nonce: z.string().max(200).optional() }) } },
     async (req) => {
       const u = await requireUser(deps, req);
+      // Installing from an AI host needs the install panel's nonce (the user clicked Install).
+      if (u.via === "token") await consumePending(deps, u.userId, "install", req.params.slug, req.body.nonce);
       const r = await installApp(deps, u.userId, req.params.slug, { orgId: req.body.orgId, via: u.via === "token" ? "gateway" : "web" });
       return { installId: r.install.id, appId: r.app.id, slug: r.app.slug, orgId: r.install.orgId, upgraded: r.upgraded };
     },

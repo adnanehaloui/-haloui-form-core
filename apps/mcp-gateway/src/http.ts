@@ -65,7 +65,12 @@ export function createGatewayHttpServer(cfg: GatewayConfig, opts: { jwks?: JWTVe
       if (req.method !== "POST") return json(res, 405, { error: "method_not_allowed" }, { allow: "POST" });
 
       const chunks: Buffer[] = [];
-      for await (const c of req) chunks.push(c as Buffer);
+      let size = 0;
+      for await (const c of req) {
+        size += (c as Buffer).length;
+        if (size > 1024 * 1024) return json(res, 413, { error: "request_too_large" });
+        chunks.push(c as Buffer);
+      }
       const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : undefined;
       const server = buildGatewayServer(cfg, user);
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

@@ -89,7 +89,10 @@ describe("M6 — enterprise", () => {
     outsider = await signIn(ctx, "owner@other.test");
     orgA = (await ctx.app.inject({ method: "POST", url: "/orgs", headers: { cookie: owner }, payload: { name: "Corp A", slug: "corp-a" } })).json().id;
     orgB = (await ctx.app.inject({ method: "POST", url: "/orgs", headers: { cookie: outsider }, payload: { name: "Corp B", slug: "corp-b" } })).json().id;
-    memberId = (await ctx.app.inject({ method: "POST", url: `/orgs/${orgA}/members`, headers: { cookie: owner }, payload: { email: "member@corp.test", role: "member" } })).json().userId;
+    await ctx.app.inject({ method: "POST", url: `/orgs/${orgA}/invites`, headers: { cookie: owner }, payload: { email: "member@corp.test", role: "member" } });
+    const inviteLink = /(https?:\/\/\S+)/.exec(ctx.deps.mailer.outbox!.filter((m) => m.to === "member@corp.test").at(-1)!.text)![1]!;
+    await ctx.app.inject({ method: "POST", url: `/invites/${inviteLink.split("/invites/")[1]}/accept`, headers: { cookie: member } });
+    memberId = (await me(ctx, member)).user.id;
     fx = await fixtureApp(ctx, { slug: "videostudio" });
   });
 
@@ -160,7 +163,7 @@ describe("M6 — enterprise", () => {
       expect(r.body).not.toContain("Corp A");
     }
     const writes = [
-      { method: "POST" as const, url: `/orgs/${orgA}/members`, payload: { email: "x@x.test", role: "owner" } },
+      { method: "POST" as const, url: `/orgs/${orgA}/invites`, payload: { email: "x@x.test", role: "owner" } },
       { method: "PUT" as const, url: `/orgs/${orgA}/catalog`, payload: { mode: "open" } },
       { method: "PUT" as const, url: `/orgs/${orgA}/budgets`, payload: { userId: null, period: "monthly", capCents: 0, autoApproveThresholdCents: 0 } },
       { method: "POST" as const, url: "/wallet/topup", payload: { amountCents: 1000, orgId: orgA } },

@@ -6,6 +6,7 @@ import type { App, Deps } from "../context.js";
 import { requireUser } from "../lib/auth.js";
 import { conflict, notFound } from "../lib/errors.js";
 import { audit } from "../services/audit.js";
+import { consumePending } from "./gateway.js";
 
 /**
  * "This costs €0.50 — approve?" Decisions can come from the AIX website (session) or from the
@@ -41,15 +42,18 @@ export async function approvalRoutes(app: App, deps: Deps) {
 
   app.post(
     "/approvals/:id/decision",
-    { schema: { tags: ["approvals"], params: z.object({ id: z.string() }), body: z.object({ decision: z.enum(["approve", "deny"]) }) } },
+    { schema: { tags: ["approvals"], params: z.object({ id: z.string() }), body: z.object({ decision: z.enum(["approve", "deny"]), nonce: z.string().max(200).optional() }) } },
     async (req) => {
       const u = await requireUser(deps, req);
       const a = await load(req.params.id, u.userId);
       if (a.status !== "pending") throw conflict(`approval is ${a.status}`);
+      // From an AI host (via the gateway) a decision needs the approval panel's single-use nonce: the model
+      // or another app can't approve on the user's behalf. On the AIX website the session is the user.
+      const gatewayCall = u.via === "token" ? await consumePending(deps, u.userId, "approval", a.id, req.body.nonce) : null;
       const status = req.body.decision === "approve" ? "approved" : "denied";
       await deps.db.update(approvalRequests).set({ status, decidedAt: deps.now() }).where(and(eq(approvalRequests.id, a.id), eq(approvalRequests.status, "pending")));
       await audit(deps.db, { actorUserId: u.userId, actorType: u.via === "token" ? "gateway" : "user", action: `approval.${status}`, targetType: "approval", targetId: a.id, metadata: { amountCents: a.amountCents, appId: a.app.id } });
-      return { ...a, status };
+      return { ...a, status, gatewayCall };
     },
   );
 }

@@ -4,9 +4,8 @@ import { orgMembers, organizations, users } from "@aix/db";
 import { newId } from "@aix/core";
 import type { App, Deps } from "../context.js";
 import { requireOrgRole, requireSessionUser, requireUser } from "../lib/auth.js";
-import { badRequest, conflict, notFound } from "../lib/errors.js";
+import { badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
 import { audit } from "../services/audit.js";
-import { findOrCreateUserByEmail } from "../services/users.js";
 import { getOrCreateOrgWallet } from "../services/wallets.js";
 
 const role = z.enum(["owner", "admin", "billing", "member"]);
@@ -47,22 +46,23 @@ export async function orgRoutes(app: App, deps: Deps) {
       .where(eq(orgMembers.orgId, req.params.orgId));
   });
 
-  app.post(
-    "/orgs/:orgId/members",
-    { schema: { tags: ["orgs"], params: z.object({ orgId: z.string() }), body: z.object({ email: z.email(), role }) } },
+  /** Change a member's role. Only owners can grant or remove the owner role. */
+  app.patch(
+    "/orgs/:orgId/members/:userId",
+    { schema: { tags: ["orgs"], params: z.object({ orgId: z.string(), userId: z.string() }), body: z.object({ role }) } },
     async (req) => {
       const u = await requireSessionUser(deps, req);
       const myRole = await requireOrgRole(deps, u.userId, req.params.orgId, ["owner", "admin"]);
-      if (req.body.role === "owner" && myRole !== "owner") throw badRequest("only owners can add owners");
-      return deps.db.transaction(async (tx) => {
-        const { user } = await findOrCreateUserByEmail(tx, req.body.email);
-        await tx.insert(orgMembers).values({ orgId: req.params.orgId, userId: user.id, role: req.body.role }).onConflictDoUpdate({
-          target: [orgMembers.orgId, orgMembers.userId],
-          set: { role: req.body.role },
-        });
-        await audit(tx, { actorUserId: u.userId, actorType: "user", orgId: req.params.orgId, action: "org.member_added", targetType: "user", targetId: user.id, metadata: { role: req.body.role } });
-        return { userId: user.id, email: user.email, role: req.body.role };
-      });
+      const [target] = await deps.db.select().from(orgMembers).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.userId, req.params.userId)));
+      if (!target) throw notFound("member not found");
+      if ((target.role === "owner" || req.body.role === "owner") && myRole !== "owner") throw forbidden("only owners can change owner roles");
+      if (target.role === "owner" && req.body.role !== "owner") {
+        const owners = await deps.db.select().from(orgMembers).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.role, "owner")));
+        if (owners.length === 1) throw badRequest("an organization needs at least one owner");
+      }
+      await deps.db.update(orgMembers).set({ role: req.body.role }).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.userId, req.params.userId)));
+      await audit(deps.db, { actorUserId: u.userId, actorType: "user", orgId: req.params.orgId, action: "org.member_role_changed", targetType: "user", targetId: req.params.userId, metadata: { from: target.role, to: req.body.role } });
+      return { ok: true };
     },
   );
 
@@ -71,7 +71,9 @@ export async function orgRoutes(app: App, deps: Deps) {
     { schema: { tags: ["orgs"], params: z.object({ orgId: z.string(), userId: z.string() }) } },
     async (req) => {
       const u = await requireSessionUser(deps, req);
-      await requireOrgRole(deps, u.userId, req.params.orgId, ["owner", "admin"]);
+      const myRole = await requireOrgRole(deps, u.userId, req.params.orgId, ["owner", "admin"]);
+      const [target] = await deps.db.select().from(orgMembers).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.userId, req.params.userId)));
+      if (target?.role === "owner" && myRole !== "owner") throw forbidden("only owners can remove owners");
       const owners = await deps.db.select().from(orgMembers).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.role, "owner")));
       if (owners.length === 1 && owners[0]!.userId === req.params.userId) throw badRequest("cannot remove the last owner");
       const r = await deps.db.delete(orgMembers).where(and(eq(orgMembers.orgId, req.params.orgId), eq(orgMembers.userId, req.params.userId))).returning();

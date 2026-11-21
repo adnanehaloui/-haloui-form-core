@@ -17,7 +17,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-xs text-white">A</span>AIX
             </Link>
             <form action="/search" className="order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:max-w-sm">
-              <input name="q" placeholder="Search apps and results" aria-label="Search apps" className="w-full rounded-full border border-line bg-card px-4 py-1.5 text-sm outline-none focus:border-accent" />
+              <input name="q" placeholder="Search apps" aria-label="Search apps" className="w-full rounded-full border border-line bg-card px-4 py-1.5 text-sm outline-none focus:border-accent" />
             </form>
             <Link href="/" className="text-muted hover:text-ink">Discover</Link>
             <Link href="/search" className="text-muted hover:text-ink">Apps</Link>

@@ -64,6 +64,6 @@ export function verifyWebhookSignature(body: string, header: string, secret: str
 /** Redact anything that looks like a secret before it reaches a log. */
 export function redact(value: string): string {
   return value
-    .replace(/\b(sk|rk|whsec|aixsk)_[A-Za-z0-9_]+/g, "$1_[REDACTED]")
+    .replace(/\b(sk|rk|whsec|aixsk|aixit|aixinv|aixcs)_[A-Za-z0-9_-]+/g, "$1_[REDACTED]")
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]");
 }

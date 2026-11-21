@@ -14,7 +14,7 @@ describe("scheduler", () => {
     const calls: string[] = [];
     let failOnce = true;
     const jobs: Job[] = [
-      { name: "invoices", key: () => "2026-10", run: async (_d, k) => calls.push(`invoices:${k}`) },
+      { name: "invoices", key: () => "2026-10", run: async (_d, k) => { await new Promise((r) => setTimeout(r, 300)); calls.push(`invoices:${k}`); } },
       { name: "flaky", key: () => "2026-10", run: async () => { if (failOnce) { failOnce = false; throw new Error("boom"); } calls.push("flaky"); } },
     ];
     const [a, b] = await Promise.all([tick(ctx.deps, jobs), tick(ctx.deps, jobs)]);

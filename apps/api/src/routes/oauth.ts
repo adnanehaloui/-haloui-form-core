@@ -10,7 +10,7 @@ import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import type { FastifyRequest } from "fastify";
 import { createHash } from "node:crypto";
 import { oauthClients, oauthGrants, users } from "@aix/db";
-import { newId, randomToken, safeEqual, sha256Hex } from "@aix/core";
+import { newId, randomToken, safeEqual, safeFetchText, sha256Hex } from "@aix/core";
 import type { App, Deps } from "../context.js";
 import { requireSessionUser } from "../lib/auth.js";
 import { ApiError, badRequest, notFound } from "../lib/errors.js";
@@ -48,15 +48,19 @@ export function validRedirectUri(uri: string): boolean {
   return /^[a-z][a-z0-9+.-]*:$/.test(u.protocol) && !["javascript:", "data:", "file:", "vbscript:", "blob:"].includes(u.protocol);
 }
 
-/** Look up a client; for URL client ids, fetch and cache the client-ID metadata document. */
+const cimdMisses = new Map<string, number>(); // negative cache: client_id URL → retry-after (ms)
+
+/** Look up a client; for URL client ids, fetch and cache the client-ID metadata document (SSRF-guarded). */
 async function getClient(deps: Deps, clientId: string) {
   const [c] = await deps.db.select().from(oauthClients).where(eq(oauthClients.id, clientId));
   if (c) return c;
-  if (!/^https:\/\//.test(clientId) && !/^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(clientId)) return null;
+  const dev = deps.config.NODE_ENV !== "production";
+  if (!/^https:\/\//.test(clientId) && !(dev && /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(clientId))) return null;
+  if ((cimdMisses.get(clientId) ?? 0) > Date.now()) return null;
   try {
-    const res = await fetch(clientId, { signal: AbortSignal.timeout(3000), headers: { accept: "application/json" } });
-    if (!res.ok) return null;
-    const doc = (await res.json()) as { client_id?: string; client_name?: string; redirect_uris?: string[] };
+    const res = await safeFetchText(clientId, { maxBytes: 16 * 1024, timeoutMs: 3000, allowInsecureLocal: dev, init: { headers: { accept: "application/json" } } });
+    if (!res.ok) throw new Error("not ok");
+    const doc = JSON.parse(res.text) as { client_id?: string; client_name?: string; redirect_uris?: string[] };
     if (doc.client_id !== clientId || !Array.isArray(doc.redirect_uris) || !doc.redirect_uris.every(validRedirectUri)) return null;
     const [created] = await deps.db
       .insert(oauthClients)
@@ -65,6 +69,8 @@ async function getClient(deps: Deps, clientId: string) {
       .returning();
     return created ?? null;
   } catch {
+    if (cimdMisses.size > 10_000) cimdMisses.clear();
+    cimdMisses.set(clientId, Date.now() + 10 * 60_000);
     return null;
   }
 }
@@ -250,7 +256,12 @@ export async function oauthRoutes(app: App, deps: Deps) {
         .set({ usedAt: deps.now() })
         .where(and(eq(oauthGrants.tokenHash, sha256Hex(b.refresh_token)), eq(oauthGrants.kind, "refresh"), isNull(oauthGrants.usedAt), isNull(oauthGrants.revokedAt), gt(oauthGrants.expiresAt, deps.now())))
         .returning();
-      if (!g || g.clientId !== client.id) throw oauthError(400, "invalid_grant", "invalid refresh token");
+      if (!g || g.clientId !== client.id) {
+        // Reuse of an already-rotated refresh token = likely theft: revoke every refresh token of that user+client.
+        const [old] = await deps.db.select().from(oauthGrants).where(and(eq(oauthGrants.tokenHash, sha256Hex(b.refresh_token)), eq(oauthGrants.kind, "refresh")));
+        if (old?.usedAt) await deps.db.update(oauthGrants).set({ revokedAt: deps.now() }).where(and(eq(oauthGrants.userId, old.userId), eq(oauthGrants.clientId, old.clientId), eq(oauthGrants.kind, "refresh"), isNull(oauthGrants.revokedAt)));
+        throw oauthError(400, "invalid_grant", "invalid refresh token");
+      }
       return issueTokens(deps, { userId: g.userId, clientId: client.id, scopes: g.scopes, resource: g.resource });
     }
     throw oauthError(400, "unsupported_grant_type", "use authorization_code or refresh_token");

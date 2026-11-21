@@ -6,11 +6,11 @@ export class AixApiError extends Error {
 }
 
 export class AixApi {
-  constructor(private apiUrl: string, private accessToken: string) {}
+  constructor(private apiUrl: string, private accessToken: string, private serviceSecret?: string) {}
   async req<T = any>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await fetch(this.apiUrl + path, {
       method,
-      headers: { authorization: `Bearer ${this.accessToken}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+      headers: { authorization: `Bearer ${this.accessToken}`, ...(this.serviceSecret ? { "x-aix-gateway-secret": this.serviceSecret } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(15_000),
     });

@@ -28,6 +28,7 @@ const freePort = () =>
     });
   });
 
+const SECRET = "gateway-service-secret-0123456789abcdef";
 let ctx: Ctx;
 let apiUrl: string;
 let gatewayUrl: string;
@@ -44,14 +45,14 @@ beforeAll(async () => {
   const [apiPort, gwPort, appPort] = [await freePort(), await freePort(), await freePort()];
   apiUrl = `http://127.0.0.1:${apiPort}`;
   gatewayUrl = `http://127.0.0.1:${gwPort}`;
-  ctx = await setup({ AIX_API_URL: apiUrl, AIX_GATEWAY_URL: gatewayUrl, AIX_WEB_URL: "http://web.test" });
+  ctx = await setup({ AIX_API_URL: apiUrl, AIX_GATEWAY_URL: gatewayUrl, AIX_WEB_URL: "http://web.test", AIX_GATEWAY_SERVICE_SECRET: SECRET });
   await ctx.app.listen({ port: apiPort, host: "127.0.0.1" });
-  gateway = createGatewayHttpServer({ port: gwPort, gatewayUrl, apiUrl, rateLimitPerMinute: 1000 });
+  gateway = createGatewayHttpServer({ port: gwPort, gatewayUrl, apiUrl, rateLimitPerMinute: 1000, serviceSecret: SECRET });
   await new Promise<void>((ok) => gateway.listen(gwPort, "127.0.0.1", ok));
   // A second, independent gateway instance (same resource URL) to prove state is shared via the API.
   const gw2Port = await freePort();
   gateway2Url = `http://127.0.0.1:${gw2Port}`;
-  gateway2 = createGatewayHttpServer({ port: gw2Port, gatewayUrl, apiUrl, rateLimitPerMinute: 1000 });
+  gateway2 = createGatewayHttpServer({ port: gw2Port, gatewayUrl, apiUrl, rateLimitPerMinute: 1000, serviceSecret: SECRET });
   await new Promise<void>((ok) => gateway2.listen(gw2Port, "127.0.0.1", ok));
   resetGatewayState();
 
@@ -163,6 +164,10 @@ describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () =>
     expect(reuse.status).toBe(400);
   });
 
+  it("an AI host can't use its token against the API directly (only via the gateway)", async () => {
+    expect((await fetch(`${apiUrl}/me`, { headers: { authorization: `Bearer ${accessToken}` } })).status).toBe(401);
+  });
+
   it("the access token can't be used to charge (only secret keys can)", async () => {
     const r = await fetch(`${apiUrl}/v1/holds`, { method: "POST", headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ userId: "x", priceId: "render", idempotencyKey: "k" }) });
     expect(r.status).toBe(401);
@@ -170,7 +175,14 @@ describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () =>
 
   it("store_search + install through the panel flow (nonce in _meta)", async () => {
     const c = await mcp();
-    const tools = (await c.listTools()).tools.map((t) => t.name);
+    const all = (await c.listTools()).tools;
+    // Nonce-issuing tools are model-only; nonce-consuming ones are panel-only.
+    const vis = (n: string) => (all.find((t) => t.name === n)!._meta as any).ui.visibility;
+    expect(vis("aix_approve")).toEqual(["model"]);
+    expect(vis("app_install")).toEqual(["model"]);
+    expect(vis("approval_decide")).toEqual(["app"]);
+    expect(vis("app_install_confirm")).toEqual(["app"]);
+    const tools = all.map((t) => t.name);
     expect(tools).toEqual(expect.arrayContaining(["store_search", "app_install", "wallet_balance", "aix_approve"]));
     expect(tools).not.toContain(`${slug}__render`);
     const found: any = await c.callTool({ name: "store_search", arguments: { query: "render" } });

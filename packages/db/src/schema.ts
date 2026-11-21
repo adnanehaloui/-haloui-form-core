@@ -353,7 +353,7 @@ export const approvalRequests = pgTable(
     decidedAt: ts("decided_at"),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("approvals_app_idem").on(t.appId, t.idempotencyKey)],
+  (t) => [uniqueIndex("approvals_app_user_idem").on(t.appId, t.userId, t.idempotencyKey)],
 );
 
 export const usageRecords = pgTable(

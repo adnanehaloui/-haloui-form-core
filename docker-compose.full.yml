@@ -48,6 +48,7 @@ services:
     depends_on: { postgres: { condition: service_healthy } }
   gateway:
     build: { context: ., target: gateway }
+    env_file: [{ path: .env, required: false }]
     environment:
       AIX_API_URL: ${AIX_API_URL:-http://localhost:4000}
       AIX_GATEWAY_URL: ${AIX_GATEWAY_URL:-http://localhost:4100}

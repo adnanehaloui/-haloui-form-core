@@ -75,7 +75,8 @@ export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}) {
         }
       : false,
     bodyLimit: 20 * 1024 * 1024,
-    trustProxy: true,
+    // Only trust X-Forwarded-For from the configured number of proxy hops (spoofable otherwise).
+    trustProxy: deps.config.AIX_TRUST_PROXY > 0 ? (_addr: string, hop: number) => hop < deps.config.AIX_TRUST_PROXY : false,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);

@@ -29,6 +29,10 @@ const schema = z.object({
   S3_FORCE_PATH_STYLE: bool,
   /** Bearer token required for /metrics (always required in production). */
   AIX_METRICS_TOKEN: z.string().optional(),
+  /** Shared secret the MCP gateway sends (x-aix-gateway-secret). Without it, gateway tokens are refused (required in production). */
+  AIX_GATEWAY_SERVICE_SECRET: z.string().optional(),
+  /** Reverse-proxy hops to trust for the client IP (X-Forwarded-For). 0 = none (direct connections). */
+  AIX_TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   /** Git URL (or path) of the exported Claude Code plugin marketplace (`job:export-marketplace`), if published. */
   AIX_PLUGIN_MARKETPLACE_URL: z.string().optional(),
   AIX_MAILER: z.enum(["smtp", "memory"]).default("smtp"),
@@ -65,6 +69,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
     if (c.AIX_DEV_ENDPOINTS) throw new Error("AIX_DEV_ENDPOINTS must be off in production");
     if (c.AIX_STORAGE === "s3" && (!c.S3_BUCKET || !c.S3_ACCESS_KEY_ID || !c.S3_SECRET_ACCESS_KEY)) throw new Error("S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required with AIX_STORAGE=s3");
+    if (!c.AIX_GATEWAY_SERVICE_SECRET || c.AIX_GATEWAY_SERVICE_SECRET.length < 32) throw new Error("AIX_GATEWAY_SERVICE_SECRET (≥ 32 chars) is required in production");
     if (!c.AIX_METRICS_TOKEN) throw new Error("AIX_METRICS_TOKEN is required in production (protects /metrics)");
     if (c.STRIPE_SECRET_KEY?.startsWith("sk_live_")) throw new Error("Live Stripe keys are not allowed yet (test mode only)");
   }
