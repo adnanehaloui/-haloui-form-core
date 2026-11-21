@@ -9,7 +9,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, GetPromptRequestSchema, ListPromptsRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type CallToolResult, type Tool } from "@modelcontextprotocol/sdk/types.js";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { AixApi, AixApiError } from "./api-client.js";
 import type { GatewayConfig } from "./config.js";
@@ -115,10 +115,10 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
   const server = new Server(
     { name: "aix", title: "AIX — AI app store", version: "0.1.0" },
     {
-      capabilities: { tools: { listChanged: true }, resources: {} },
+      capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} },
       instructions:
         "AIX gives the user one wallet for AI apps. Use store_search to find apps and app_install to install them. " +
-        "Installed apps' tools are named <app>__<tool>. If a tool reports that a charge needs approval, call aix_approve with the approvalId so the user can decide — never approve on the user's behalf.",
+        "Installed apps' tools are named <app>__<tool>. Installed skills can be loaded with skill_load (or used as prompts).  If a tool reports that a charge needs approval, call aix_approve with the approvalId so the user can decide — never approve on the user's behalf.",
     },
   );
 
@@ -173,7 +173,32 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
     return result;
   }
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...BUILTIN_TOOLS, ...(await listAppTools())] }));
+  type SkillRow = { app: string; appName: string; name: string; description: string; content: string };
+  const listSkills = async () => (await api.get<{ data: SkillRow[] }>("/gateway/skills")).data;
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const skills = await listSkills().catch(() => [] as SkillRow[]);
+    const skillTool: Tool[] = skills.length
+      ? [{
+          name: "skill_load",
+          title: "Load an installed AIX skill",
+          description: `Load the full instructions of a skill the user installed from AIX, then follow them. Available: ${skills.map((s) => `${s.name} — ${s.description || s.appName}`).join("; ")}`,
+          inputSchema: { type: "object", properties: { name: { type: "string", enum: skills.map((s) => s.name) } }, required: ["name"] },
+          annotations: { readOnlyHint: true },
+        }]
+      : [];
+    return { tools: [...BUILTIN_TOOLS, ...skillTool, ...(await listAppTools())] };
+  });
+
+  // Skills (prompt apps) are also exposed as MCP prompts, for hosts that surface prompts as slash-commands.
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: (await listSkills()).map((s) => ({ name: s.name, title: `${s.appName}: ${s.name.split("__")[1]}`, description: s.description })),
+  }));
+  server.setRequestHandler(GetPromptRequestSchema, async ({ params }) => {
+    const s = (await listSkills()).find((x) => x.name === params.name);
+    if (!s) throw new Error(`skill ${params.name} is not installed`);
+    return { description: s.description, messages: [{ role: "user", content: { type: "text", text: s.content } }] };
+  });
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({
     resources: [
@@ -201,6 +226,11 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
     const args = (params.arguments ?? {}) as Record<string, any>;
     try {
       switch (params.name) {
+        case "skill_load": {
+          const s = (await listSkills()).find((x) => x.name === args.name);
+          if (!s) return errorResult(`Skill ${args.name} is not installed. Use store_search / app_install to add skills.`);
+          return { content: [text(`Skill "${s.name}" from ${s.appName}. Follow these instructions:\n\n${s.content}`)] };
+        }
         case "store_search": {
           const q = new URLSearchParams({ ...(args.query ? { q: String(args.query) } : {}), ...(args.category ? { category: String(args.category) } : {}) });
           const { data } = await api.get<{ data: any[] }>(`/store/apps?${q}`);

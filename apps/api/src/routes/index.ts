@@ -13,6 +13,7 @@ import { oauthRoutes } from "./oauth.js";
 import { gatewayRoutes } from "./gateway.js";
 import { billingRoutes } from "./billing.js";
 import { orgAdminRoutes } from "./org-admin.js";
+import { installRoutes } from "./install.js";
 
 export async function registerRoutes(app: App, deps: Deps) {
   await authRoutes(app, deps);
@@ -29,5 +30,6 @@ export async function registerRoutes(app: App, deps: Deps) {
   await gatewayRoutes(app, deps);
   await billingRoutes(app, deps);
   await orgAdminRoutes(app, deps);
+  await installRoutes(app, deps);
   if (deps.config.AIX_DEV_ENDPOINTS) await devRoutes(app, deps);
 }

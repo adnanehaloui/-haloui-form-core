@@ -5,6 +5,7 @@ import { CATEGORY, HOSTS, compactNumber, hashColor } from "@/lib/ui";
 import { ApiForm } from "@/components/client";
 import { AppIcon, AppRow, ChatPreview, ShowcaseCard, Stars, type AppSummary } from "@/components/store";
 import { InstallPanel, SubscribeButton } from "./install";
+import { UseIn, type ConnectInfo } from "@/components/use-in";
 
 const PERM_ICON = (l: string) => (l.startsWith("Connect") ? "🌐" : l.startsWith("Access files") ? "📁" : l.startsWith("Read your") ? "👤" : l.startsWith("Run code") ? "💻" : "🛡️");
 
@@ -13,6 +14,8 @@ export default async function AppPage({ params }: { params: Promise<{ slug: stri
   const app = await api<any>(`/store/apps/${slug}`).catch((e) => (e instanceof ApiError && e.status === 404 ? null : Promise.reject(e)));
   if (!app) notFound();
   const me = await getMe();
+  const info = await api<ConnectInfo>("/store/connect-info");
+  const skills = app.type === "prompt" && app.me?.installed ? (await api<{ skills: { name: string; description: string }[] }>(`/store/apps/${slug}/skills`).catch(() => ({ skills: [] }))).skills : [];
   const color = app.color ?? hashColor(app.slug);
   const paid = app.prices.find((p: any) => p.unitAmountCents > 0);
   const price = paid?.label ?? "Free";
@@ -40,6 +43,8 @@ export default async function AppPage({ params }: { params: Promise<{ slug: stri
           <div><dt className="text-xs uppercase tracking-wide text-muted">Works in</dt><dd className="mt-1 text-xl font-semibold">{app.hosts.length}</dd><dd className="text-xs text-muted">{app.hosts.map((h: string) => HOSTS[h] ?? h).join(" · ")}</dd></div>
         </dl>
       </section>
+
+      <UseIn app={{ slug, name: app.name, type: app.type, entry: app.entry }} info={info} installed={!!app.me?.installed} skills={skills} example={app.showcase[0]?.input} />
 
       {/* Results */}
       {app.showcase.length > 0 && (

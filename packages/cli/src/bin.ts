@@ -7,6 +7,7 @@ import { slugify } from "@aix/manifest";
 import { api, CliApiError } from "./api.js";
 import { CONFIG_PATH, loadCliConfig, saveCliConfig } from "./config.js";
 import { DEV_SECRET_KEY, DEV_USER_TOKEN, startMockApi } from "./mock.js";
+import { addSkills, AGENT_DIRS } from "./add.js";
 import { describePermissions, initApp, packApp, readManifest, TEMPLATES, type Template } from "./project.js";
 
 const program = new Command().name("aix").description("AIX developer CLI").version("0.1.0");
@@ -33,6 +34,21 @@ program
     const me = await api(next, "GET", "/developer").catch((e) => fail(e.message));
     await saveCliConfig(next);
     console.log(`✔ Logged in as ${me.developer.displayName}. Saved to ${CONFIG_PATH}`);
+  });
+
+program
+  .command("add <app>")
+  .description("Install an app's skills into Claude Code, Cursor, Codex… (get the command with a token on the app's AIX page)")
+  .requiredOption("--token <token>", "install token from the app page (valid 15 minutes)")
+  .addOption(new Option("--agent <agent>", "where to install").choices(Object.keys(AGENT_DIRS)).default("claude-code"))
+  .option("-g, --global", "install for your user instead of this project")
+  .option("--api-url <url>", "AIX API URL")
+  .action(async (slug: string, o) => {
+    const cfg = await loadCliConfig();
+    const r = await addSkills({ slug, token: o.token, apiUrl: o.apiUrl ?? cfg.apiUrl, agent: o.agent, global: !!o.global }).catch((e) => fail(e.message));
+    console.log(`✔ Installed ${r.app.name} ${r.app.version} for ${r.agentLabel}:`);
+    for (const w of r.written) console.log(`  ${w}`);
+    if (o.agent === "claude-code") console.log("\nRestart Claude Code (or start a new session) to load the skills.");
   });
 
 const appCmd = program.command("app").description("Create, validate and publish apps");

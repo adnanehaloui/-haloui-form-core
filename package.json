@@ -16,7 +16,8 @@
     "db:migrate": "pnpm --filter @aix/db db:migrate",
     "seed": "pnpm --filter @aix/api seed",
     "keys:generate": "pnpm --filter @aix/api keys:generate",
-    "e2e": "playwright test --trace off"
+    "e2e": "playwright test --trace off",
+    "aix": "node packages/cli/dist/bin.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

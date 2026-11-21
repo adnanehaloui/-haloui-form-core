@@ -19,6 +19,8 @@ const schema = z.object({
   /** Ed25519 private key, PKCS#8 PEM (\n-escaped ok). Signs OAuth tokens, AIX user tokens and app packages. */
   AIX_SIGNING_PRIVATE_KEY: z.string().optional(),
   AIX_STORAGE_DIR: z.string().default("./.storage"),
+  /** Git URL (or path) of the exported Claude Code plugin marketplace (`job:export-marketplace`), if published. */
+  AIX_PLUGIN_MARKETPLACE_URL: z.string().optional(),
   AIX_MAILER: z.enum(["smtp", "memory"]).default("smtp"),
   SMTP_URL: z.string().default("smtp://localhost:1025"),
   MAIL_FROM: z.string().default("AIX <no-reply@aix.local>"),

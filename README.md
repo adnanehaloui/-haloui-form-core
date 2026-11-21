@@ -8,8 +8,9 @@ Developers publish with an SDK and get paid without writing login or billing cod
 - Decisions: [`docs/decisions.md`](docs/decisions.md)
 - Open questions: [`docs/open-questions.md`](docs/open-questions.md)
 - Running locally: [`docs/running-locally.md`](docs/running-locally.md)
+- Build & install into Claude / ChatGPT / Cursor / Claude Code: [`docs/build-and-install.md`](docs/build-and-install.md)
 
-**Status:** M0–M6 implemented (test mode). `pnpm test` runs 67 tests incl. end-to-end M1–M6 criteria; `pnpm e2e` runs the Playwright happy path; CI and Docker images included.
+**Status:** M0–M6 implemented (test mode). `pnpm test` runs 73 tests incl. end-to-end M1–M6 criteria; `pnpm e2e` runs the Playwright happy path; CI and Docker images included.
 
 | Path | What |
 |---|---|

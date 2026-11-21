@@ -72,6 +72,11 @@ beforeAll(async () => {
   await cliApi({ apiUrl, secretKey: secret }, "POST", `/developer/apps/${slug}/prices`, { kind: "metered", unit: "render", unitAmountCents: 50, lookupKey: "render" });
   const admin = await signIn(ctx, "admin@aix.test");
   await ctx.app.inject({ method: "POST", url: `/admin/versions/${pub.versionId}/approve`, headers: { cookie: admin } });
+  // A prompt app (skills) too.
+  const pdir = join(await mkdtemp(join(tmpdir(), "aix-gw-")), "launch");
+  await initApp(pdir, "prompt", { name: "Launch Copy", id: "com.acme.launchcopy" });
+  const ppub = await cliApi({ apiUrl, secretKey: secret }, "POST", "/developer/publish", { packageBase64: (await packApp(pdir)).pkg.toString("base64") });
+  await ctx.app.inject({ method: "POST", url: `/admin/versions/${ppub.versionId}/approve`, headers: { cookie: admin } });
 
   // Run the developer's MCP server (the real template code) as its own process.
   const templateServer = resolve(__dirname, "../../../templates/server/src/server.ts");
@@ -106,6 +111,7 @@ async function mcp(token = accessToken, base = gatewayUrl) {
 }
 
 describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () => {
+  // (skills test is at the end, after sign-in)
   it("unauthenticated MCP requests get 401 + resource metadata", async () => {
     const r = await fetch(`${gatewayUrl}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(r.status).toBe(401);
@@ -222,6 +228,21 @@ describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () =>
     const last = entries.find((e) => (e.metadata as any).chargeIds.length > 0)!;
     expect(last.metadata).toMatchObject({ tool: "render" });
     expect(JSON.stringify(entries)).not.toContain("A launch");
+    await c.close();
+  });
+
+  it("installed skills work in any MCP host: skill_load tool + MCP prompts", async () => {
+    await ctx.app.inject({ method: "POST", url: "/store/apps/launch-copy/install", headers: { cookie: userCookie }, payload: { acceptPermissions: true } });
+    const c = await mcp();
+    const tools = (await c.listTools()).tools;
+    const load = tools.find((t) => t.name === "skill_load")!;
+    expect(load.description).toContain("launch-copy__launch-announcement");
+    const r: any = await c.callTool({ name: "skill_load", arguments: { name: "launch-copy__launch-announcement" } });
+    expect(r.content[0].text).toContain("# Launch announcement");
+    const prompts = (await c.listPrompts()).prompts.map((p) => p.name);
+    expect(prompts).toEqual(["launch-copy__launch-announcement", "launch-copy__changelog"]);
+    const p = await c.getPrompt({ name: "launch-copy__changelog" });
+    expect((p.messages[0]!.content as any).text).toContain("Changelog entry");
     await c.close();
   });
 });
