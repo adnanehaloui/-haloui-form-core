@@ -1,7 +1,44 @@
 {
   "name": "@aix/api",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Fastify REST API (Zod schemas → OpenAPI), auth, OAuth 2.1 provider, wallet/ledger, Stripe webhooks, jobs."
+  "description": "Fastify REST API (Zod schemas → OpenAPI), auth, OAuth 2.1 provider, wallet/ledger, Stripe webhooks, jobs.",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/server.ts",
+    "build": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "openapi": "tsx src/scripts/openapi.ts",
+    "job:payouts": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts payouts",
+    "job:invoices": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts invoices",
+    "job:expire-holds": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts expire-holds",
+    "job:export-marketplace": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts export-marketplace",
+    "keys:generate": "tsx src/scripts/generate-keys.ts",
+    "seed": "tsx --env-file-if-exists=../../.env src/scripts/seed.ts"
+  },
+  "dependencies": {
+    "@aix/core": "workspace:*",
+    "@aix/db": "workspace:*",
+    "@aix/manifest": "workspace:*",
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/formbody": "^9.0.2",
+    "@fastify/rate-limit": "^11.3.0",
+    "@fastify/swagger": "^9.9.5",
+    "@fastify/swagger-ui": "^6.1.5",
+    "arctic": "^3.7.0",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "fastify-type-provider-zod": "^7.0.0",
+    "jose": "^6.2.18",
+    "nodemailer": "^10.6.1",
+    "pdfkit": "^0.21.0",
+    "stripe": "^23.2.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.7"
+  }
 }

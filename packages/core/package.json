@@ -1,7 +1,17 @@
 {
   "name": "@aix/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Pure domain logic shared by api and jobs: money (integer cents), ledger posting rules, commission split, spend-limit evaluation."
+  "description": "Pure domain logic: money (integer cents), ledger posting rules, commission split, spend-limit evaluation, crypto helpers.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json -w --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  }
 }
