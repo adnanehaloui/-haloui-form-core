@@ -9,6 +9,7 @@ import { formatMoney, newId } from "@aix/core";
 import type { Deps } from "../context.js";
 import { periodBounds } from "./payouts.js";
 import { computeTax } from "./tax.js";
+import { emailInvoice } from "./emails.js";
 
 export interface InvoiceLine { appId: string; appName: string; charges: number; amountCents: number; refundedCents: number }
 
@@ -43,10 +44,13 @@ export async function runInvoices(deps: Deps, period: string) {
   for (const w of all) {
     const inv = await computeInvoice(deps, w.id, period);
     if (inv.lines.length === 0) continue;
+    const [existing] = await deps.db.select({ id: invoices.id }).from(invoices).where(and(eq(invoices.walletId, w.id), eq(invoices.period, period)));
     await deps.db
       .insert(invoices)
       .values({ id: newId("inv"), walletId: w.id, period, totalCents: inv.totalCents, lines: inv.lines })
       .onConflictDoUpdate({ target: [invoices.walletId, invoices.period], set: { totalCents: inv.totalCents, lines: inv.lines } });
+    // Email each statement once (re-runs refresh the row but don't re-send).
+    if (!existing) await emailInvoice(deps, w.id, period, inv.totalCents, await renderInvoicePdf(deps, w.id, period));
     n++;
   }
   return n;

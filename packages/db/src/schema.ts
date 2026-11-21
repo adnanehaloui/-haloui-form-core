@@ -41,6 +41,8 @@ export const txKind = pgEnum("tx_kind", [
   "subscription_payment",
   "payout",
   "card_refund",
+  "dispute",
+  "dispute_reversal",
   "seed",
 ]);
 export const appType = pgEnum("app_type", ["prompt", "server", "local", "web"]);
@@ -61,6 +63,11 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name"),
   stripeCustomerId: text("stripe_customer_id"),
+  /** Set by an admin ban: sessions, tokens and charges are refused. */
+  disabledAt: ts("disabled_at"),
+  disabledReason: text("disabled_reason"),
+  /** Account deleted by the user: personal data anonymized, financial records kept. */
+  deletedAt: ts("deleted_at"),
   createdAt: createdAt(),
 });
 
@@ -279,6 +286,7 @@ export const reviews = pgTable(
     userId: text("user_id").notNull().references(() => users.id),
     rating: integer("rating").notNull(),
     body: text("body").notNull().default(""),
+    hiddenAt: ts("hidden_at"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("reviews_app_user").on(t.appId, t.userId), check("rating_range", sql`${t.rating} between 1 and 5`)],
@@ -494,4 +502,84 @@ export const gatewayPending = pgTable(
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("gateway_pending_user_kind_ref").on(t.userId, t.kind, t.ref)],
+);
+
+// ---- Payments: card top-ups, refunds, disputes ----------------------------------------------
+export const topups = pgTable(
+  "topups",
+  {
+    id: text("id").primaryKey(),
+    walletId: text("wallet_id").notNull().references(() => wallets.id),
+    checkoutSessionId: text("checkout_session_id").notNull().unique(),
+    paymentIntentId: text("payment_intent_id"),
+    amountCents: cents("amount_cents").notNull(),
+    refundedCents: cents("refunded_cents").notNull().default(0),
+    currency: text("currency").notNull().default("EUR"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("topups_wallet").on(t.walletId), index("topups_pi").on(t.paymentIntentId)],
+);
+
+export const disputes = pgTable("disputes", {
+  id: text("id").primaryKey(),
+  topupId: text("topup_id").references(() => topups.id),
+  stripeDisputeId: text("stripe_dispute_id").notNull().unique(),
+  amountCents: cents("amount_cents").notNull(),
+  status: text("status").notNull(),
+  createdAt: createdAt(),
+});
+
+// ---- Org invitations ---------------------------------------------------------------------------
+export const orgInvites = pgTable("org_invites", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id").notNull().references(() => organizations.id),
+  email: text("email").notNull(),
+  role: orgRole("role").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  invitedBy: text("invited_by").notNull().references(() => users.id),
+  expiresAt: ts("expires_at").notNull(),
+  acceptedAt: ts("accepted_at"),
+  revokedAt: ts("revoked_at"),
+  createdAt: createdAt(),
+});
+
+// ---- Moderation --------------------------------------------------------------------------------
+export const reports = pgTable("reports", {
+  id: text("id").primaryKey(),
+  reporterUserId: text("reporter_user_id").notNull().references(() => users.id),
+  targetType: text("target_type").notNull(), // app | review
+  targetId: text("target_id").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("open"), // open | resolved | dismissed
+  resolvedBy: text("resolved_by"),
+  createdAt: createdAt(),
+});
+
+// ---- Workflows (multi-app, run by the user's AI) ------------------------------------------------
+export const workflows = pgTable(
+  "workflows",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    steps: jsonb("steps").notNull(),
+    createdAt: createdAt(),
+    updatedAt: ts("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("workflows_user_slug").on(t.userId, t.slug)],
+);
+
+// ---- Scheduled jobs (exactly-once per job+key across instances) ---------------------------------
+export const jobRuns = pgTable(
+  "job_runs",
+  {
+    id: text("id").primaryKey(),
+    job: text("job").notNull(),
+    key: text("key").notNull(),
+    result: jsonb("result"),
+    ranAt: ts("ran_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("job_runs_job_key").on(t.job, t.key)],
 );

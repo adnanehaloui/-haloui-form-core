@@ -5,7 +5,7 @@ import { ActionButton } from "@/components/client";
 export default async function Admin() {
   const me = await getMe();
   if (!me?.isAdmin) redirect("/");
-  const [q, apps, charges, ledger] = await Promise.all([api<{ data: any[] }>("/admin/reviews"), api<{ data: any[] }>("/admin/apps"), api<{ data: any[] }>("/admin/charges"), api<any>("/admin/health/ledger")]);
+  const [q, apps, charges, ledger, tops] = await Promise.all([api<{ data: any[] }>("/admin/reviews"), api<{ data: any[] }>("/admin/apps"), api<{ data: any[] }>("/admin/charges"), api<any>("/admin/health/ledger"), api<{ data: any[] }>("/admin/topups")]);
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between"><h1 className="h1">Admin</h1><span className={`pill ${ledger.balanced ? "text-good" : "text-bad"}`}>ledger {ledger.balanced ? "balanced" : "UNBALANCED"}</span></div>
@@ -27,6 +27,10 @@ export default async function Admin() {
       <section className="card">
         <h2 className="h2 mb-2">Apps</h2>
         <table className="table"><tbody>{apps.data.map((a) => <tr key={a.id}><td>{a.name}</td><td>{a.status}</td><td>{a.status === "suspended" ? <ActionButton path={`/admin/apps/${a.id}/unsuspend`}>Unsuspend</ActionButton> : <ActionButton path={`/admin/apps/${a.id}/suspend`} confirm={`Suspend ${a.name}?`}>Suspend</ActionButton>}</td></tr>)}</tbody></table>
+      </section>
+      <section className="card">
+        <h2 className="h2 mb-2">Card top-ups (refund unused money)</h2>
+        <table className="table"><tbody>{tops.data.map((t) => <tr key={t.id}><td>{t.email ?? "org wallet"}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td><td>€{(t.amountCents / 100).toFixed(2)}</td><td className="muted">refundable €{(t.refundableCents / 100).toFixed(2)}</td><td>{t.refundableCents > 0 && <ActionButton path={`/admin/topups/${t.id}/refund`} body={{ amountCents: t.refundableCents, reason: "Refund issued by support" }} confirm={`Refund €${(t.refundableCents / 100).toFixed(2)} to the card? (Only unused wallet money can be refunded.)`}>Refund to card</ActionButton>}</td></tr>)}</tbody></table>
       </section>
       <section className="card">
         <h2 className="h2 mb-2">Recent charges</h2>

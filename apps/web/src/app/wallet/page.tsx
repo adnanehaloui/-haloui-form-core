@@ -8,6 +8,7 @@ export default async function Wallet({ searchParams }: { searchParams: Promise<{
   const me = await getMe();
   if (!me) redirect("/login?redirectTo=/wallet");
   const sp = await searchParams;
+  const [subs, tops] = await Promise.all([api<{ data: any[] }>("/me/subscriptions"), api<{ data: any[] }>("/wallet/topups")]);
   const [w, tx, limits, inv, conns, installs] = await Promise.all([
     api<any>("/wallet"),
     api<{ data: any[] }>("/wallet/transactions?limit=50"),
@@ -72,6 +73,29 @@ export default async function Wallet({ searchParams }: { searchParams: Promise<{
           <ul className="mt-2 flex flex-col gap-1 text-sm">
             {inv.data.map((i: any) => <li key={i.id}>{i.period} — {money(i.totalCents)} · <a className="text-accent underline" href={`/api/wallet/invoices/${i.period}.pdf`}>PDF</a></li>)}
           </ul>
+        </section>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <section className="card">
+          <div className="mb-2 flex items-center justify-between gap-2"><h2 className="h2">Subscriptions</h2><ActionButton path="/me/billing-portal" redirectField="url">Manage payment methods</ActionButton></div>
+          <ul className="flex flex-col gap-2 text-sm">
+            {subs.data.length === 0 && <li className="muted">No subscriptions.</li>}
+            {subs.data.map((s) => (
+              <li key={s.id} className="flex items-center justify-between gap-2">
+                <span><a className="underline" href={`/apps/${s.app.slug}`}>{s.app.name}</a> <span className="muted">· {s.price} · {s.status === "canceling" ? `ends ${s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString() : "at period end"}` : s.status}</span></span>
+                {["active", "trialing"].includes(s.status) && <ActionButton path={`/me/subscriptions/${s.id}/cancel`} confirm={`Cancel ${s.app.name}? You keep access until the end of the period.`}>Cancel</ActionButton>}
+              </li>
+            ))}
+          </ul>
+        </section>
+        <section className="card">
+          <h2 className="h2 mb-2">Card top-ups</h2>
+          <ul className="flex flex-col gap-1 text-sm">
+            {tops.data.length === 0 && <li className="muted">No card payments yet.</li>}
+            {tops.data.map((t) => <li key={t.id} className="flex justify-between gap-2"><span className="muted">{new Date(t.createdAt).toLocaleDateString()}</span><span>{t.display}{t.refundedCents > 0 && <span className="muted"> · {money(t.refundedCents)} refunded</span>}</span></li>)}
+          </ul>
+          <p className="mt-2 text-xs text-muted">Need unused money back on your card? Contact support — refunds go back to the original card.</p>
         </section>
       </div>
 

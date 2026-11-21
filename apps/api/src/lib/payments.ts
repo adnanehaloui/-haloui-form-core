@@ -17,6 +17,11 @@ export interface Payments {
   createConnectOnboardingLink(i: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<string>;
   getConnectAccountStatus(accountId: string): Promise<"pending" | "enabled" | "restricted">;
   createTransfer(i: { accountId: string; amountCents: number; currency: string; idempotencyKey: string; description: string }): Promise<string>;
+  /** Stripe-hosted page where a customer manages cards and subscriptions. */
+  createPortalSession(i: { customerId: string; returnUrl: string }): Promise<string>;
+  cancelSubscription(i: { subscriptionId: string; atPeriodEnd: boolean }): Promise<{ status: string; cancelAtPeriodEnd: boolean }>;
+  /** Refund part of a card payment. Returns the Stripe refund id and status. */
+  refundPayment(i: { paymentIntentId: string; amountCents: number; idempotencyKey: string; reason: string; topupId: string }): Promise<{ id: string; status: string }>;
 }
 
 export class PaymentsUnavailableError extends Error {
@@ -81,6 +86,18 @@ export function stripePayments(secretKey: string, webhookSecret: string | undefi
       if (a.payouts_enabled && a.charges_enabled !== undefined) return "enabled";
       return a.requirements?.disabled_reason ? "restricted" : "pending";
     },
+    async createPortalSession(i) {
+      const s = await stripe.billingPortal.sessions.create({ customer: i.customerId, return_url: i.returnUrl });
+      return s.url;
+    },
+    async cancelSubscription(i) {
+      const s = i.atPeriodEnd ? await stripe.subscriptions.update(i.subscriptionId, { cancel_at_period_end: true }) : await stripe.subscriptions.cancel(i.subscriptionId);
+      return { status: s.status, cancelAtPeriodEnd: !!s.cancel_at_period_end };
+    },
+    async refundPayment(i) {
+      const r = await stripe.refunds.create({ payment_intent: i.paymentIntentId, amount: i.amountCents, metadata: { aix_reason: i.reason.slice(0, 200), aix_topup_id: i.topupId } }, { idempotencyKey: i.idempotencyKey });
+      return { id: r.id, status: r.status ?? "pending" };
+    },
     async createTransfer(i) {
       const t = await stripe.transfers.create(
         { amount: i.amountCents, currency: i.currency.toLowerCase(), destination: i.accountId, description: i.description },
@@ -110,6 +127,19 @@ export class FakePayments implements Payments {
   async createConnectAccount() { const id = this.next("acct"); this.connectStatus.set(id, "pending"); return id; }
   async createConnectOnboardingLink(i: { accountId: string }) { return `https://connect.stripe.test/onboard/${i.accountId}`; }
   async getConnectAccountStatus(id: string) { return this.connectStatus.get(id) ?? "pending"; }
+  refunds: { id: string; paymentIntentId: string; amountCents: number; idempotencyKey: string }[] = [];
+  canceled: { subscriptionId: string; atPeriodEnd: boolean }[] = [];
+  failRefunds = false;
+  async createPortalSession(i: { customerId: string }) { return `${this.checkoutBaseUrl}/portal/${i.customerId}`; }
+  async cancelSubscription(i: { subscriptionId: string; atPeriodEnd: boolean }) { this.canceled.push(i); return { status: i.atPeriodEnd ? "active" : "canceled", cancelAtPeriodEnd: i.atPeriodEnd }; }
+  async refundPayment(i: { paymentIntentId: string; amountCents: number; idempotencyKey: string }) {
+    if (this.failRefunds) throw new Error("card_declined");
+    const existing = this.refunds.find((r) => r.idempotencyKey === i.idempotencyKey);
+    if (existing) return { id: existing.id, status: "succeeded" };
+    const id = this.next("re");
+    this.refunds.push({ id, ...i });
+    return { id, status: "succeeded" };
+  }
   async createTransfer(i: { accountId: string; amountCents: number; idempotencyKey: string }) {
     const existing = this.transfers.find((t) => t.idempotencyKey === i.idempotencyKey);
     if (existing) return existing.id;

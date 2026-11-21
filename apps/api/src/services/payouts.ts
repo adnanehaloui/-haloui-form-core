@@ -8,6 +8,8 @@ import { apps, charges, developers, ledgerEntries, ledgerTransactions, payouts }
 import { formatMoney, newId, postPayout } from "@aix/core";
 import type { Deps } from "../context.js";
 import { audit } from "./audit.js";
+import { emailPayout } from "./emails.js";
+import { users } from "@aix/db";
 import { balance, ensureDeveloperAccount, PLATFORM, postTransaction } from "./ledger.js";
 
 export function periodBounds(period: string) {
@@ -110,6 +112,8 @@ export async function runPayouts(deps: Deps, period = previousPeriod(deps.now())
         await audit(tx, { actorType: "system", action: "payout.paid", targetType: "developer", targetId: d.id, metadata: { period, amountCents, transferId } });
       });
       results.push({ developerId: d.id, status: "paid", amountCents, transferId });
+      const [u] = d.userId ? await deps.db.select().from(users).where(eq(users.id, d.userId)) : [];
+      if (u) await emailPayout(deps, u.email, period, amountCents, "paid");
     } catch (e: any) {
       await deps.db.update(payouts).set({ status: "failed", statement: { ...statement, error: String(e.message).slice(0, 300) } }).where(eq(payouts.id, id));
       results.push({ developerId: d.id, status: "failed", amountCents, reason: e.message });

@@ -70,3 +70,13 @@ Simple-first choices. Each entry: decision — why — revisit when.
 ## D21. In development without keys: generated signing key in `.storage/`, fake Stripe checkout page
 ## D22. One multi-target Dockerfile; API and gateway run TypeScript with tsx in production
 - **Why:** no separate bundling step to maintain. Images: `api`, `gateway`, `migrate`, `web`. **Revisit:** compile to JS for faster cold starts.
+## D23. Refunds to card: admin-initiated, only unused wallet money, per original payment
+- Wallet credit isn't cash: only money still unused in the wallet goes back, to the card it came from, capped at
+  each payment's remaining amount. Ledger: wallet → refunds_payable → (Stripe accepted) clearing; a Stripe refusal
+  reverses immediately, a later `refund.failed` webhook returns it to the wallet. **Revisit** once the e-money /
+  store-credit question (open-questions Q1) is answered — self-service refunds may then be required.
+
+## D24. Chargebacks debit the wallet immediately and may make it negative
+- A negative wallet can't pay for anything (holds need a positive balance). Won disputes credit it back.
+
+## D25. Subscriptions cancel at period end by default; "canceling" stays entitled until then

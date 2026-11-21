@@ -39,6 +39,8 @@ export const TRANSACTION_KINDS = [
   "subscription_payment",
   "payout",
   "card_refund",
+  "dispute",
+  "dispute_reversal",
   "seed",
 ] as const;
 export type TransactionKind = (typeof TRANSACTION_KINDS)[number];
@@ -166,6 +168,38 @@ export function postPayout<A>(a: { developerPayable: A; clearing: A }, amountCen
   return tx("payout", currency, [
     { account: a.developerPayable, direction: "debit", amountCents },
     { account: a.clearing, direction: "credit", amountCents },
+  ]);
+}
+
+/** Refund to card, step 1: user's available balance → refunds payable (money is on its way back). */
+export function postCardRefundRequested<A>(a: { walletAvailable: A; refundsPayable: A }, amountCents: number, currency: Currency = "EUR") {
+  return tx("card_refund", currency, [
+    { account: a.walletAvailable, direction: "debit", amountCents },
+    { account: a.refundsPayable, direction: "credit", amountCents },
+  ]);
+}
+
+/** Refund to card, step 2: Stripe sent it — refunds payable → out of Stripe clearing. */
+export function postCardRefundSettled<A>(a: { refundsPayable: A; clearing: A }, amountCents: number, currency: Currency = "EUR") {
+  return tx("card_refund", currency, [
+    { account: a.refundsPayable, direction: "debit", amountCents },
+    { account: a.clearing, direction: "credit", amountCents },
+  ]);
+}
+
+/** A chargeback pulled money from Stripe: take it from the wallet (may go negative = debt). */
+export function postDispute<A>(a: { walletAvailable: A; clearing: A }, amountCents: number, currency: Currency = "EUR") {
+  return tx("dispute", currency, [
+    { account: a.walletAvailable, direction: "debit", amountCents },
+    { account: a.clearing, direction: "credit", amountCents },
+  ]);
+}
+
+/** Dispute won (or a refund failed): money is back at Stripe and in the wallet. */
+export function postDisputeReversal<A>(a: { clearing: A; walletAvailable: A }, amountCents: number, currency: Currency = "EUR") {
+  return tx("dispute_reversal", currency, [
+    { account: a.clearing, direction: "debit", amountCents },
+    { account: a.walletAvailable, direction: "credit", amountCents },
   ]);
 }
 

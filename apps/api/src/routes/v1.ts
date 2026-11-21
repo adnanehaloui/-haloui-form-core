@@ -98,7 +98,7 @@ export async function v1Routes(app: App, deps: Deps) {
         const [s] = await deps.db
           .select()
           .from(subscriptions)
-          .where(and(eq(subscriptions.userId, req.body.userId), eq(subscriptions.priceId, price.id), inArray(subscriptions.status, ["active", "trialing"]), gt(subscriptions.currentPeriodEnd, deps.now())));
+          .where(and(eq(subscriptions.userId, req.body.userId), eq(subscriptions.priceId, price.id), inArray(subscriptions.status, ["active", "trialing", "canceling"]), gt(subscriptions.currentPeriodEnd, deps.now())));
         return s ? { entitled: true, kind: "subscription", currentPeriodEnd: s.currentPeriodEnd } : { entitled: false, reason: "no_active_subscription" };
       }
       if (price.kind === "free") return { entitled: true, kind: "free" };
