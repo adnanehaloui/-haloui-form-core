@@ -32,6 +32,10 @@ const schema = z.object({
   AIX_HOLD_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   /** Minimum wallet top-up in cents. */
   AIX_MIN_TOPUP_CENTS: z.coerce.number().int().positive().default(500),
+  /** Fraud limits on card top-ups (per wallet): daily total, checkout attempts per hour, and a lower cap for new accounts. */
+  AIX_MAX_TOPUP_DAILY_CENTS: z.coerce.number().int().positive().default(50_000),
+  AIX_MAX_TOPUP_ATTEMPTS_PER_HOUR: z.coerce.number().int().positive().default(5),
+  AIX_NEW_ACCOUNT_TOPUP_DAILY_CENTS: z.coerce.number().int().positive().default(10_000),
   /** Minimum developer payout in cents. */
   AIX_MIN_PAYOUT_CENTS: z.coerce.number().int().nonnegative().default(100),
   /** Enables /_dev endpoints (memory mailbox, fake top-ups). Never in production. */

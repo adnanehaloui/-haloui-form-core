@@ -14,6 +14,7 @@ import { gatewayRoutes } from "./gateway.js";
 import { billingRoutes } from "./billing.js";
 import { orgAdminRoutes } from "./org-admin.js";
 import { installRoutes } from "./install.js";
+import { trustRoutes } from "./trust.js";
 
 export async function registerRoutes(app: App, deps: Deps) {
   await authRoutes(app, deps);
@@ -31,5 +32,6 @@ export async function registerRoutes(app: App, deps: Deps) {
   await billingRoutes(app, deps);
   await orgAdminRoutes(app, deps);
   await installRoutes(app, deps);
+  await trustRoutes(app, deps);
   if (deps.config.AIX_DEV_ENDPOINTS) await devRoutes(app, deps);
 }

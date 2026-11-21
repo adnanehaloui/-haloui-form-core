@@ -136,7 +136,7 @@ export async function storeSearch(deps: Deps, q: { q?: string | undefined; categ
   const out = [];
   for (const r of rows) {
     const ps = await deps.db.select().from(prices).where(and(eq(prices.appId, r.app.id), eq(prices.active, true)));
-    const [rv] = await deps.db.select({ avg: avg(reviews.rating), n: count() }).from(reviews).where(eq(reviews.appId, r.app.id));
+    const [rv] = await deps.db.select({ avg: avg(reviews.rating), n: count() }).from(reviews).where(and(eq(reviews.appId, r.app.id), isNull(reviews.hiddenAt)));
     const m = r.version.manifest as Manifest;
     out.push({
       id: r.app.id,
@@ -217,10 +217,10 @@ export async function storeRoutes(app: App, deps: Deps) {
     const m = v.manifest as Manifest;
     const ps = await deps.db.select().from(prices).where(and(eq(prices.appId, a.id), eq(prices.active, true)));
     const rv = await deps.db
-      .select({ rating: reviews.rating, body: reviews.body, createdAt: reviews.createdAt, name: users.name })
+      .select({ id: reviews.id, rating: reviews.rating, body: reviews.body, createdAt: reviews.createdAt, name: users.name })
       .from(reviews)
       .innerJoin(users, eq(users.id, reviews.userId))
-      .where(eq(reviews.appId, a.id))
+      .where(and(eq(reviews.appId, a.id), isNull(reviews.hiddenAt)))
       .orderBy(desc(reviews.createdAt))
       .limit(20);
     const user = await getUser(deps, req);
@@ -249,7 +249,7 @@ export async function storeRoutes(app: App, deps: Deps) {
       prices: ps.map((p) => ({ id: p.id, lookupKey: p.lookupKey, kind: p.kind, unit: p.unit, unitAmountCents: p.unitAmountCents, interval: p.interval, includedUnits: p.includedUnits, label: priceLabel(p) })),
       reviews: rv.map((r) => ({ ...r, name: r.name ?? "AIX user" })),
       rating: await (async () => {
-        const [x] = await deps.db.select({ avg: avg(reviews.rating), n: count() }).from(reviews).where(eq(reviews.appId, a.id));
+        const [x] = await deps.db.select({ avg: avg(reviews.rating), n: count() }).from(reviews).where(and(eq(reviews.appId, a.id), isNull(reviews.hiddenAt)));
         return x?.n ? { average: Number(Number(x.avg).toFixed(1)), count: x.n } : null;
       })(),
       installs: (await installCounts(deps, [a.id])).get(a.id) ?? 0,

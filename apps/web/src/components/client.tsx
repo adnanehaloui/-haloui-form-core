@@ -15,7 +15,7 @@ export async function call(path: string, method = "POST", body?: unknown) {
 }
 
 /** All props are serializable so server components can render it. */
-export function ActionButton(props: { path: string; method?: string; body?: unknown; children: ReactNode; className?: string; confirm?: string; redirectField?: string; redirectTo?: string; onDone?: (r: any) => void }) {
+export function ActionButton(props: { path: string; method?: string; body?: unknown; children: ReactNode; className?: string; confirm?: string; redirectField?: string; redirectTo?: string; redirectTemplate?: string; onDone?: (r: any) => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -31,7 +31,7 @@ export function ActionButton(props: { path: string; method?: string; body?: unkn
           try {
             const r = await call(props.path, props.method ?? "POST", props.body);
             props.onDone?.(r);
-            const to = props.redirectField ? r[props.redirectField] : props.redirectTo;
+            const to = props.redirectField ? r[props.redirectField] : props.redirectTemplate ? props.redirectTemplate.replace(/\{(\w+)\}/g, (_m: string, k: string) => String(r[k])) : props.redirectTo;
             if (to) window.location.href = to;
             else router.refresh();
           } catch (e: any) {

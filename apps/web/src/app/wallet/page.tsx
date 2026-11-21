@@ -99,6 +99,14 @@ export default async function Wallet({ searchParams }: { searchParams: Promise<{
         </section>
       </div>
 
+      <section className="card flex flex-wrap items-center justify-between gap-3">
+        <div><h2 className="h2">Your data</h2><p className="muted">Download everything AIX stores about you, or delete your account. Financial records are kept (anonymized) as the law requires.</p></div>
+        <div className="flex gap-2">
+          <a className="btn" href="/api/me/export">Download my data</a>
+          <ActionButton path="/me/delete" body={{ confirm: "DELETE" }} confirm="Delete your AIX account? This can't be undone. Your wallet must be empty." redirectTo="/">Delete account</ActionButton>
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2">
         <section className="card">
           <h2 className="h2 mb-2">Installed apps</h2>

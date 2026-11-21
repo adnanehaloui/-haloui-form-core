@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull, lt } from "drizzle-orm";
-import { apps, charges, ledgerEntries, ledgerTransactions, spendLimits, users } from "@aix/db";
+import { and, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
+import { apps, auditLog, charges, ledgerEntries, ledgerTransactions, spendLimits, topups, users } from "@aix/db";
 import { formatMoney, newId, type Currency } from "@aix/core";
 import type { App, Deps } from "../context.js";
 import { requireOrgRole, requireSessionUser, requireUser, type UserAuth } from "../lib/auth.js";
-import { badRequest } from "../lib/errors.js";
+import { ApiError, badRequest } from "../lib/errors.js";
 import { PaymentsUnavailableError } from "../lib/payments.js";
 import { walletAccountIds } from "../services/ledger.js";
 import { getOrCreateOrgWallet, getOrCreateUserWallet, walletBalance } from "../services/wallets.js";
@@ -109,6 +109,15 @@ export async function walletRoutes(app: App, deps: Deps) {
       if (!deps.payments) throw new PaymentsUnavailableError();
       const w = await resolveWallet(deps, u, req.body.orgId, true);
       const [user] = await deps.db.select().from(users).where(eq(users.id, u.userId));
+      // Velocity limits (card-testing / stolen-card protection).
+      const dayAgo = new Date(deps.now().getTime() - 86400_000);
+      const hourAgo = new Date(deps.now().getTime() - 3600_000);
+      const [paid] = await deps.db.select({ s: sql<string>`coalesce(sum(${topups.amountCents}),0)` }).from(topups).where(and(eq(topups.walletId, w.id), gt(topups.createdAt, dayAgo)));
+      const [attempts] = await deps.db.select({ n: sql<number>`count(*)::int` }).from(auditLog).where(and(eq(auditLog.action, "wallet.topup_started"), eq(auditLog.targetId, w.id), gt(auditLog.createdAt, hourAgo)));
+      const newAccount = !req.body.orgId && user!.createdAt > dayAgo;
+      const dailyCap = newAccount ? deps.config.AIX_NEW_ACCOUNT_TOPUP_DAILY_CENTS : deps.config.AIX_MAX_TOPUP_DAILY_CENTS;
+      if ((attempts?.n ?? 0) >= deps.config.AIX_MAX_TOPUP_ATTEMPTS_PER_HOUR) throw new ApiError(429, "rate_limited", "too many top-up attempts — try again in an hour");
+      if (Number(paid?.s ?? 0) + req.body.amountCents > dailyCap) throw badRequest(`daily top-up limit is ${formatMoney(dailyCap)}${newAccount ? " for new accounts" : ""}`);
       const back = req.body.orgId ? `/orgs/${req.body.orgId}` : "/wallet";
       const session = await deps.payments.createTopUpCheckout({
         walletId: w.id,

@@ -3,7 +3,7 @@
  * for app usage. Called exclusively from developer-secret-key routes (hard rule 3).
  */
 import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
-import { apps, approvalRequests, charges, installs, orgMembers, prices, spendLimits, type DbOrTx } from "@aix/db";
+import { apps, approvalRequests, charges, installs, orgMembers, prices, spendLimits, users, type DbOrTx } from "@aix/db";
 import {
   evaluateSpend,
   formatMoney,
@@ -141,6 +141,8 @@ export async function hold(deps: Deps, developerId: string, input: HoldInput): P
   const replay = await findCharge(deps.db, app.id, input.idempotencyKey);
   if (replay) return assertSameRequest(replay, input, price.id);
 
+  const [payer] = await deps.db.select({ disabledAt: users.disabledAt, deletedAt: users.deletedAt }).from(users).where(eq(users.id, input.userId));
+  if (!payer || payer.disabledAt || payer.deletedAt) throw new ApiError(403, "forbidden", "this AIX account can't be charged");
   const install = await activeInstall(deps.db, input.userId, app.id);
   if (!install) throw new ApiError(403, "not_installed", "user has not installed this app");
   await assertAppAllowedForUser(deps, input.userId, app.id, install.orgId);

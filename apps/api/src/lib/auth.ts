@@ -1,6 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, gt, isNull } from "drizzle-orm";
-import { apiKeys, orgMembers, sessions, users } from "@aix/db";
+import { apiKeys, developers, orgMembers, sessions, users } from "@aix/db";
 import { newId, randomToken, sha256Hex } from "@aix/core";
 import type { Deps } from "../context.js";
 import { ApiError, forbidden, unauthorized } from "./errors.js";
@@ -62,7 +62,7 @@ export async function getUser(deps: Deps, req: FastifyRequest): Promise<UserAuth
       const scopes = String(p.scope ?? "").split(" ").filter(Boolean);
       if (p.sub && p.token_use === "access" && scopes.includes("aix:gateway")) {
         const [u] = await deps.db.select().from(users).where(eq(users.id, p.sub));
-        if (u) result = { userId: u.id, email: u.email, via: "token", scopes, isAdmin: false };
+        if (u && !u.disabledAt && !u.deletedAt) result = { userId: u.id, email: u.email, via: "token", scopes, isAdmin: false };
       }
     } catch {
       result = null;
@@ -71,11 +71,11 @@ export async function getUser(deps: Deps, req: FastifyRequest): Promise<UserAuth
     const cookie = req.cookies[SESSION_COOKIE];
     if (cookie) {
       const [row] = await deps.db
-        .select({ userId: sessions.userId, email: users.email, expiresAt: sessions.expiresAt })
+        .select({ userId: sessions.userId, email: users.email, expiresAt: sessions.expiresAt, disabledAt: users.disabledAt, deletedAt: users.deletedAt })
         .from(sessions)
         .innerJoin(users, eq(users.id, sessions.userId))
         .where(and(eq(sessions.id, sha256Hex(cookie)), gt(sessions.expiresAt, deps.now())));
-      if (row) {
+      if (row && !row.disabledAt && !row.deletedAt) {
         result = { userId: row.userId, email: row.email, via: "session", scopes: ["*"], isAdmin: deps.config.adminEmails.has(row.email) };
       }
     }
@@ -115,6 +115,8 @@ export async function requireDeveloperKey(deps: Deps, req: FastifyRequest, scope
   if (!token || !token.startsWith("aixsk_")) throw unauthorized("developer secret key required (Authorization: Bearer aixsk_…)");
   const [k] = await deps.db.select().from(apiKeys).where(and(eq(apiKeys.hash, sha256Hex(token)), isNull(apiKeys.revokedAt)));
   if (!k) throw unauthorized("invalid or revoked secret key");
+  const [owner] = await deps.db.select({ disabledAt: users.disabledAt }).from(developers).innerJoin(users, eq(users.id, developers.userId)).where(eq(developers.id, k.developerId));
+  if (owner?.disabledAt) throw forbidden("this developer account is suspended");
   if (!k.scopes.includes(scope)) throw new ApiError(403, "forbidden", `secret key lacks scope ${scope}`);
   await deps.db.update(apiKeys).set({ lastUsedAt: deps.now() }).where(eq(apiKeys.id, k.id));
   return { developerId: k.developerId, keyId: k.id, scopes: k.scopes };

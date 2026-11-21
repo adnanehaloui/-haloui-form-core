@@ -55,6 +55,7 @@ export async function authRoutes(app: App, deps: Deps) {
         .returning();
       if (!row) return reply.redirect(`${web}/login?error=link_expired`);
       const { user } = await deps.db.transaction((tx) => findOrCreateUserByEmail(tx, row.email));
+      if (user.disabledAt || user.deletedAt) return reply.redirect(`${web}/login?error=account_disabled`);
       await createSession(deps, reply, user.id);
       return reply.redirect(`${web}${safeRedirect(row.redirectTo)}`);
     },
@@ -90,6 +91,7 @@ export async function authRoutes(app: App, deps: Deps) {
       await tx.insert(authIdentities).values({ id: newId("idn"), userId: user.id, provider: "google", providerUserId: claims.sub }).onConflictDoNothing();
       return user;
     });
+    if (user.disabledAt || user.deletedAt) return reply.redirect(`${web}/login?error=account_disabled`);
     await createSession(deps, reply, user.id);
     reply.clearCookie("aix_g_state", { path: "/" }).clearCookie("aix_g_verifier", { path: "/" }).clearCookie("aix_g_redirect", { path: "/" });
     return reply.redirect(`${web}${safeRedirect(redirectTo)}`);

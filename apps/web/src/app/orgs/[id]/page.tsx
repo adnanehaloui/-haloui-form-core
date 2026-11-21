@@ -7,6 +7,7 @@ export default async function Org({ params }: { params: Promise<{ id: string }> 
   if (!org) return <p className="muted">Organization not found.</p>;
   const admin = ["owner", "admin"].includes(org.myRole);
   const finance = admin || org.myRole === "billing";
+  const invites = admin ? await api<{ data: any[] }>(`/orgs/${id}/invites`) : { data: [] };
   const [members, policies, wallet, budgets, store, auditRows, charges] = await Promise.all([
     api<any[]>(`/orgs/${id}/members`),
     api<{ data: any[] }>(`/orgs/${id}/policies`),
@@ -29,7 +30,17 @@ export default async function Org({ params }: { params: Promise<{ id: string }> 
           <h2 className="h2 mb-2">Members</h2>
           <table className="table"><tbody>{members.map((m) => <tr key={m.userId}><td>{m.email}</td><td><span className="pill">{m.role}</span></td><td>{admin && <ActionButton path={`/orgs/${id}/members/${m.userId}`} method="DELETE" confirm={`Remove ${m.email}?`}>Remove</ActionButton>}</td></tr>)}</tbody></table>
         </div>
-        {admin && <ApiForm path={`/orgs/${id}/members`} submit="Add member" fields={[{ name: "email", label: "Email", type: "email" }, { name: "role", label: "Role", type: "select", options: ["member", "billing", "admin", "owner"] }]} />}
+        {admin && (
+          <div className="flex flex-col gap-3">
+            <ApiForm path={`/orgs/${id}/invites`} submit="Send invitation" fields={[{ name: "email", label: "Invite by email", type: "email" }, { name: "role", label: "Role", type: "select", options: ["member", "billing", "admin", "owner"] }]} />
+            {invites.data.length > 0 && (
+              <ul className="flex flex-col gap-1 text-sm">
+                <li className="label">Pending invitations</li>
+                {invites.data.map((i) => <li key={i.id} className="flex items-center justify-between gap-2"><span>{i.email} <span className="muted">· {i.role}</span></span><ActionButton path={`/orgs/${id}/invites/${i.id}`} method="DELETE">Revoke</ActionButton></li>)}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="card flex flex-col gap-3">

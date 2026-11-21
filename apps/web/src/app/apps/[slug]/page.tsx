@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { api, ApiError, getMe } from "@/lib/api";
 import { CATEGORY, HOSTS, compactNumber, hashColor } from "@/lib/ui";
-import { ApiForm } from "@/components/client";
+import { ActionButton, ApiForm } from "@/components/client";
 import { AppIcon, AppRow, ChatPreview, ShowcaseCard, Stars, type AppSummary } from "@/components/store";
 import { InstallPanel, SubscribeButton } from "./install";
 import { UseIn, type ConnectInfo } from "@/components/use-in";
@@ -102,7 +102,7 @@ export default async function AppPage({ params }: { params: Promise<{ slug: stri
                 <div key={i} className="flex flex-col gap-1 rounded-2xl bg-card p-4">
                   <div className="flex items-center justify-between"><Stars value={r.rating} /><span className="text-xs text-muted">{new Date(r.createdAt).toLocaleDateString()}</span></div>
                   <p className="text-sm">{r.body}</p>
-                  <p className="text-xs text-muted">{r.name}</p>
+                  <div className="flex items-center justify-between"><p className="text-xs text-muted">{r.name}</p>{me && <ActionButton className="text-xs text-muted hover:text-bad" path="/reports" body={{ targetType: "review", targetId: r.id, reason: "Reported from the store as inappropriate" }} confirm="Report this review?">Report</ActionButton>}</div>
                 </div>
               ))}
             </div>
@@ -145,7 +145,7 @@ export default async function AppPage({ params }: { params: Promise<{ slug: stri
       </div>
 
       {app.related.length > 0 && <AppRow title="You might also like" apps={app.related as AppSummary[]} href={`/search?category=${app.category}`} />}
-      <p className="text-center text-xs text-muted"><Link href="/search" className="underline">Browse all apps</Link></p>
+      <p className="flex items-center justify-center gap-4 text-center text-xs text-muted"><Link href="/search" className="underline">Browse all apps</Link>{me && <ActionButton className="text-xs underline hover:text-bad" path="/reports" body={{ targetType: "app", targetId: app.id, reason: "Reported from the store" }} confirm={`Report ${app.name} to AIX?`}>Report this app</ActionButton>}</p>
     </div>
   );
 }
