@@ -1,0 +1,5 @@
+# @aix/db
+
+PostgreSQL schema, Drizzle ORM client and migrations, seed script.
+
+_Status: scaffold only (M0). Implementation starts in a later milestone — see `docs/architecture.md`._

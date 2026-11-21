@@ -1,0 +1,7 @@
+{
+  "name": "@aix/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js (App Router) web app: store, wallet, developer portal, org admin, internal admin."
+}

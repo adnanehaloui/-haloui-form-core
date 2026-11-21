@@ -1,0 +1,7 @@
+{
+  "name": "@aix/template-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Starter template for a `web` AIX app (used by `aix app init --template web`)."
+}

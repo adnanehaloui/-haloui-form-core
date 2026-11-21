@@ -1,0 +1,7 @@
+{
+  "name": "@aix/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PostgreSQL schema, Drizzle ORM client and migrations, seed script."
+}

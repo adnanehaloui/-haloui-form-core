@@ -1,0 +1,7 @@
+{
+  "name": "@aix/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure domain logic shared by api and jobs: money (integer cents), ledger posting rules, commission split, spend-limit evaluation."
+}

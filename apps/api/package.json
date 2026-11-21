@@ -1,0 +1,7 @@
+{
+  "name": "@aix/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify REST API (Zod schemas → OpenAPI), auth, OAuth 2.1 provider, wallet/ledger, Stripe webhooks, jobs."
+}

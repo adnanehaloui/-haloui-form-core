@@ -1,0 +1,7 @@
+{
+  "name": "@aix/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The `aix` developer CLI (commander): login, app init/dev/validate/publish, keys."
+}

@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aix
+      POSTGRES_PASSWORD: aix
+      POSTGRES_DB: aix
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aix"]
+      interval: 5s
+      retries: 10
+volumes:
+  pgdata:

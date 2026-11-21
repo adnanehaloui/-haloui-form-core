@@ -1,0 +1,7 @@
+{
+  "name": "@aix/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-side Node SDK for developers: auth.verify, entitlements, wallet hold/capture/release, usage, webhooks."
+}
