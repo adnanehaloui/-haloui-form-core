@@ -33,7 +33,7 @@ export default async function Search({ searchParams }: { searchParams: Promise<{
               <GetButton href={`/apps/${a.slug}`} />
             </div>
             <p className="line-clamp-2 text-sm text-muted">{a.description}</p>
-            <div className="mt-auto flex items-center justify-between gap-2"><HostBadges hosts={a.hosts} small /><span className="text-xs font-medium">{a.priceLabels[0] ?? "Free"}</span></div>
+            <div className="mt-auto flex items-center justify-between gap-2"><HostBadges hosts={a.hosts} small /><span className="shrink-0 whitespace-nowrap text-xs font-medium">{(a.priceLabels[0] ?? "Free").replace(/\s*\(.*\)$/, "")}</span></div>
           </div>
         ))}
       </div>
