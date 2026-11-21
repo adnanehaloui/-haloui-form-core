@@ -59,6 +59,20 @@ export async function installApp(deps: Deps, userId: string, slug: string, opts:
     if (!allowedRoles.includes(role)) throw new ApiError(403, "blocked_by_org_policy", `your role (${role}) can't install this app on the organization's account`);
   }
   const manifest = v.manifest as Manifest;
+  // Org "max permissions": an org may cap what apps its members install may access.
+  const caps = await deps.db
+    .select({ max: orgAppPolicies.maxPermissions })
+    .from(orgAppPolicies)
+    .innerJoin(orgMembers, and(eq(orgMembers.orgId, orgAppPolicies.orgId), eq(orgMembers.userId, userId)))
+    .where(eq(orgAppPolicies.appId, a.id));
+  for (const { max } of caps) {
+    const m = max as { network: boolean; files: boolean; userData: string[] } | null;
+    if (!m) continue;
+    const p = manifest.permissions;
+    if ((p.network.length && !m.network) || (p.files.length && !m.files) || p.userData.some((d) => !m.userData.includes(d))) {
+      throw new ApiError(403, "blocked_by_org_policy", "this app asks for more permissions than your organization allows");
+    }
+  }
   await getOrCreateUserWallet(deps.db, userId);
   return deps.db.transaction(async (tx) => {
     const [existing] = await tx.select().from(installs).where(and(eq(installs.userId, userId), eq(installs.appId, a.id), isNull(installs.uninstalledAt)));

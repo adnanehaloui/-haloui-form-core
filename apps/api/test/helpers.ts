@@ -1,5 +1,7 @@
 import { createDb, resetDatabase, apps, appVersions, developers, installs, prices, apiKeys } from "@aix/db";
 import { newId } from "@aix/core";
+import { packFiles, sha256, signingPayload } from "@aix/manifest";
+import { eq } from "drizzle-orm";
 import { buildApp, buildDeps } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
 import { FakePayments } from "../src/lib/payments.js";
@@ -66,7 +68,12 @@ export async function fixtureApp(ctx: Ctx, o: { userId?: string; unitAmountCents
   const appId = newId("app");
   await ctx.db.insert(apps).values({ id: appId, slug, manifestId: `com.acme.${slug.replace(/-/g, "")}`, name: "VideoStudio", developerId, type: "server", status: "published", commissionBps: o.commissionBps ?? 2000 });
   const versionId = newId("ver");
-  await ctx.db.insert(appVersions).values({ id: versionId, appId, version: "1.0.0", manifest: {}, packagePath: "x", packageSha256: "x", packageSize: 1, status: "approved" });
+  const manifest = { id: `com.acme.${slug.replace(/-/g, "")}`, name: "VideoStudio", version: "1.0.0", type: "server", description: "Fixture app for tests.", category: "video", entry: { mcp: "https://api.acme.test/mcp" }, compatibility: { hosts: ["claude"] }, permissions: { network: ["https://api.acme.test"], files: [], userData: ["email"] }, pricing: [] };
+  const pkg = packFiles([{ path: "aix.json", content: Buffer.from(JSON.stringify(manifest)) }]);
+  const hash = sha256(pkg);
+  await ctx.deps.storage.put(`packages/${appId}.aixpkg`, pkg);
+  await ctx.db.insert(appVersions).values({ id: versionId, appId, version: "1.0.0", manifest, packagePath: `packages/${appId}.aixpkg`, packageSha256: hash, packageSize: pkg.length, status: "approved", signature: ctx.deps.signer.signBytes(signingPayload(appId, "1.0.0", hash)) });
+  await ctx.db.update(apps).set({ currentVersionId: versionId }).where(eq(apps.id, appId));
   const priceId = newId("price");
   await ctx.db.insert(prices).values({ id: priceId, appId, lookupKey: "render", kind: "metered", unit: "render", unitAmountCents: o.unitAmountCents ?? 50, includedUnits: o.includedUnits ?? 0 });
   const key = generateApiKey();

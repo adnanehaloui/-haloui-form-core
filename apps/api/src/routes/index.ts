@@ -11,6 +11,8 @@ import { adminRoutes } from "./admin.js";
 import { marketplaceRoutes, storeRoutes } from "./store.js";
 import { oauthRoutes } from "./oauth.js";
 import { gatewayRoutes } from "./gateway.js";
+import { billingRoutes } from "./billing.js";
+import { orgAdminRoutes } from "./org-admin.js";
 
 export async function registerRoutes(app: App, deps: Deps) {
   await authRoutes(app, deps);
@@ -25,5 +27,7 @@ export async function registerRoutes(app: App, deps: Deps) {
   await marketplaceRoutes(app, deps);
   await oauthRoutes(app, deps);
   await gatewayRoutes(app, deps);
+  await billingRoutes(app, deps);
+  await orgAdminRoutes(app, deps);
   if (deps.config.AIX_DEV_ENDPOINTS) await devRoutes(app, deps);
 }
