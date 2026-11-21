@@ -6,9 +6,15 @@
   "description": "Web app template: Sign in with AIX (OAuth 2.1 + PKCE) and server-side wallet charges.",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@aix/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^5.8.0",
+    "@types/node": "^22.0.0"
   }
 }

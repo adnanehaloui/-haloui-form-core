@@ -11,15 +11,20 @@ const ALWAYS_IGNORE = new Set(["node_modules", ".git", ".env", ".turbo", "dist",
 
 export function templatesDir(): string {
   if (process.env.AIX_TEMPLATES_DIR) return process.env.AIX_TEMPLATES_DIR;
-  // packages/cli/dist → repo-root/templates (see README: bundle templates before publishing the CLI)
-  return fileURLToPath(new URL("../../../templates", import.meta.url));
+  // Published package: templates are bundled next to dist/. In the monorepo: repo-root/templates.
+  const bundled = fileURLToPath(new URL("../templates", import.meta.url));
+  return existsSync(bundled) ? bundled : fileURLToPath(new URL("../../../templates", import.meta.url));
 }
+
+/** Template package.json files use workspace:* inside the monorepo; outside it they need real versions. */
+const PUBLISHED_RANGE = "^0.1.0";
 
 export async function initApp(dir: string, template: Template, o: { name: string; id: string }) {
   const target = resolve(dir);
   if (existsSync(join(target, "aix.json"))) throw new Error(`${target} already contains an aix.json`);
   const src = join(templatesDir(), template);
-  await cp(src, target, { recursive: true, filter: (p) => !p.split(sep).some((s) => ALWAYS_IGNORE.has(s)) });
+  // Filter on the path RELATIVE to the template: the CLI itself may live inside node_modules.
+  await cp(src, target, { recursive: true, filter: (p) => !relative(src, p).split(sep).some((s) => ALWAYS_IGNORE.has(s)) });
   const manifestPath = join(target, "aix.json");
   const m = JSON.parse(await readFile(manifestPath, "utf8"));
   m.name = o.name;
@@ -31,6 +36,10 @@ export async function initApp(dir: string, template: Template, o: { name: string
   if (existsSync(pj)) {
     const p = JSON.parse(await readFile(pj, "utf8"));
     p.name = o.id.split(".").at(-1);
+    p.private = true;
+    for (const field of ["dependencies", "devDependencies"]) {
+      for (const [dep, v] of Object.entries((p[field] ?? {}) as Record<string, string>)) if (v.startsWith("workspace:")) p[field][dep] = PUBLISHED_RANGE;
+    }
     await writeFile(pj, JSON.stringify(p, null, 2) + "\n");
   }
   return target;

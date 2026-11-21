@@ -6,7 +6,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { hasZodFastifySchemaValidationErrors, jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
 import { createDb } from "@aix/db";
-import { redact } from "@aix/core";
+import { redact, sha256Hex } from "@aix/core";
 import { loadConfig, type Config } from "./config.js";
 import type { App, Deps } from "./context.js";
 import { ApiError } from "./lib/errors.js";
@@ -94,7 +94,16 @@ export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}) {
   });
   await app.register(cookie);
   await app.register(formbody);
-  await app.register(rateLimit, { max: deps.config.NODE_ENV === "test" ? 10_000 : 300, timeWindow: "1 minute" });
+  // Developer servers are limited per secret key (they legitimately send many requests from one IP);
+  // everyone else per IP. Keys are hashed so they never sit in memory as plaintext map keys.
+  await app.register(rateLimit, {
+    timeWindow: "1 minute",
+    keyGenerator: (req) => {
+      const h = req.headers.authorization;
+      return h?.startsWith("Bearer aixsk_") ? `key:${sha256Hex(h.slice(7))}` : `ip:${req.ip}`;
+    },
+    max: (req) => (deps.config.NODE_ENV === "test" ? 10_000 : req.headers.authorization?.startsWith("Bearer aixsk_") ? deps.config.AIX_DEV_RATE_LIMIT_PER_MIN : deps.config.AIX_RATE_LIMIT_PER_MIN),
+  });
   await app.register(swagger, {
     openapi: {
       info: { title: "AIX API", version: "0.1.0", description: "AIX marketplace API. Money is integer cents." },

@@ -1,18 +1,42 @@
 {
   "name": "@aix/sdk",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Server-side Node SDK for AIX developers: auth.verify, entitlements, wallet hold/capture/release, usage, webhooks.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist"],
-  "engines": { "node": ">=20" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json -w --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
-  }
+  },
+  "license": "MIT",
+  "author": "AIX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnanehaloui/-haloui-form-core.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "aix",
+    "ai",
+    "mcp",
+    "payments",
+    "sdk"
+  ]
 }

@@ -18,7 +18,8 @@
     "keys:generate": "tsx src/scripts/generate-keys.ts",
     "seed": "tsx --env-file-if-exists=../../.env src/scripts/seed.ts",
     "demo:charge": "tsx --env-file-if-exists=../../.env --env-file-if-exists=../../.env.seed src/scripts/charge-demo.ts",
-    "worker": "tsx --env-file-if-exists=../../.env src/worker.ts"
+    "worker": "tsx --env-file-if-exists=../../.env src/worker.ts",
+    "load-test": "tsx --env-file-if-exists=../../.env --env-file-if-exists=../../.env.seed src/scripts/load-test.ts"
   },
   "dependencies": {
     "@aix/core": "workspace:*",

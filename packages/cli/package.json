@@ -1,7 +1,6 @@
 {
   "name": "@aix/cli",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "The aix developer CLI: login, app init/dev/validate/publish, keys, prices.",
   "bin": {
@@ -16,16 +15,36 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "templates"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && chmod +x dist/bin.js",
     "dev": "tsc -p tsconfig.json -w --preserveWatchOutput",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "prepack": "node scripts/bundle-templates.mjs"
   },
   "dependencies": {
     "@aix/manifest": "workspace:*",
     "commander": "^15.1.0"
-  }
+  },
+  "license": "MIT",
+  "author": "AIX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnanehaloui/-haloui-form-core.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "aix",
+    "cli",
+    "mcp",
+    "skills"
+  ]
 }

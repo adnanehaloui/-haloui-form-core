@@ -80,3 +80,15 @@ Simple-first choices. Each entry: decision — why — revisit when.
 - A negative wallet can't pay for anything (holds need a positive balance). Won disputes credit it back.
 
 ## D25. Subscriptions cancel at period end by default; "canceling" stays entitled until then
+## D26. Account deletion anonymizes; financial records stay
+- Personal data (email, name, identities, reviews, workflows, memberships) is removed or anonymized; ledger,
+  charges, invoices and audit rows are kept for accounting, linked only to the anonymized id. Wallet must be empty.
+
+## D27. Workflows are run by the user's own AI, not by AIX
+- AIX stores and renders a workflow as instructions (MCP prompt / `workflow_run`); the host model calls the apps.
+  No hosted orchestration runtime (out of scope per spec), and every paid step still uses holds and approvals.
+
+## D28. Rate limits: per IP for people, per secret key for developer servers (6000/min default)
+
+## D29. Charges on one wallet are serialized (row lock) — ~90/s per wallet, parallel across wallets
+- Measured with `pnpm --filter @aix/api load-test` (2000 concurrent hold+capture pairs: exact, balanced).

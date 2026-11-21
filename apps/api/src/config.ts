@@ -39,6 +39,9 @@ const schema = z.object({
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** Hold lifetime default (seconds). */
+  /** Requests per minute: per IP for browsers/hosts, per secret key for developer servers. */
+  AIX_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(300),
+  AIX_DEV_RATE_LIMIT_PER_MIN: z.coerce.number().int().positive().default(6000),
   AIX_HOLD_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   /** Minimum wallet top-up in cents. */
   AIX_MIN_TOPUP_CENTS: z.coerce.number().int().positive().default(500),

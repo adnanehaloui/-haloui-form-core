@@ -1,7 +1,6 @@
 {
   "name": "@aix/manifest",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Zod schema and validator for aix.json app manifests.",
   "main": "./dist/index.js",
@@ -23,5 +22,21 @@
   },
   "dependencies": {
     "zod": "^4.6.7"
-  }
+  },
+  "license": "MIT",
+  "author": "AIX",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adnanehaloui/-haloui-form-core.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "aix",
+    "manifest"
+  ]
 }

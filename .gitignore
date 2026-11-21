@@ -12,3 +12,4 @@ test-results/
 .DS_Store
 .storage/
 *.tsbuildinfo
+packages/cli/templates/
