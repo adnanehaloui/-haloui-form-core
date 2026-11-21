@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { buildDeps } from "../app.js";
 import { loadConfig } from "../config.js";
 import { expireHolds } from "../services/charges.js";
+import { purgeGatewayPending } from "../routes/gateway.js";
 import { runInvoices } from "../services/invoices.js";
 import { exportMarketplace } from "../services/marketplace.js";
 import { previousPeriod, runPayouts } from "../services/payouts.js";
@@ -20,7 +21,7 @@ try {
       console.log(`invoices written: ${await runInvoices(deps, arg ?? previousPeriod())}`);
       break;
     case "expire-holds":
-      console.log(`holds released: ${await expireHolds(deps)}`);
+      console.log(`holds released: ${await expireHolds(deps)}, pending gateway actions purged: ${await purgeGatewayPending(deps)}`);
       break;
     case "export-marketplace": {
       const out = resolve(arg ?? "../../marketplace");

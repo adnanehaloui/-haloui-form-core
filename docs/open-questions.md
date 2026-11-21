@@ -12,6 +12,6 @@ Still open — need a decision from you:
 2. **Tax / merchant of record.** `apps/api/src/services/tax.ts` is a deliberate `TODO(tax)` stub. Consider Stripe Tax
    or a merchant-of-record provider.
 3. **Product name.** `@aix` is likely taken on npm — rename before publishing the SDK/CLI.
-4. **Deployment target** (Fly, Render, Railway, AWS…). Needed for public HTTPS URLs so Claude/ChatGPT can reach the gateway.
+4. **Deployment target** (Fly, Render, Railway, AWS…). Docker images and `docker-compose.full.yml` are ready; pick a host and domains so Claude/ChatGPT can reach the gateway over HTTPS.
 5. **Card refunds of wallet top-ups** (money back to the card, `refunds_payable` account) — policy not decided, not built.
 6. **Personal vs. company use under org policy** (D11) — confirm members should be blocked everywhere, not only on org-paid installs.

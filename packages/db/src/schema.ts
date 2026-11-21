@@ -474,3 +474,24 @@ export const auditLog = pgTable(
   },
   (t) => [index("audit_org_time").on(t.orgId, t.createdAt), index("audit_actor").on(t.actorUserId)],
 );
+
+// ---- Gateway pending actions (approval re-runs, install confirmations) ------------------------
+/**
+ * Short-lived state shared by all gateway instances. `nonceHash` = sha256 of the nonce that only the
+ * MCP Apps panel receives. `payload` (the original tool call) is AES-GCM encrypted when
+ * AIX_ENCRYPTION_KEY is set and the row is deleted when consumed or expired.
+ */
+export const gatewayPending = pgTable(
+  "gateway_pending",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => users.id),
+    kind: text("kind").notNull(), // "approval" | "install"
+    ref: text("ref").notNull(), // approval id or app slug
+    payload: text("payload"),
+    nonceHash: text("nonce_hash").notNull(),
+    expiresAt: ts("expires_at").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("gateway_pending_user_kind_ref").on(t.userId, t.kind, t.ref)],
+);

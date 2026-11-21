@@ -3,19 +3,79 @@
  * The gateway never sees developer secrets and can't charge; it authorizes calls and records receipts.
  */
 import { z } from "zod";
-import { and, eq, isNull } from "drizzle-orm";
-import { apps, appVersions, charges, installs } from "@aix/db";
-import { newId } from "@aix/core";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { apps, appVersions, charges, gatewayPending, installs } from "@aix/db";
+import { decryptSecret, encryptSecret, newId, randomToken, safeEqual, sha256Hex } from "@aix/core";
+import { lt } from "drizzle-orm";
 import type { Manifest } from "@aix/manifest";
 import type { App, Deps } from "../context.js";
 import { requireUser } from "../lib/auth.js";
 import { ApiError, notFound } from "../lib/errors.js";
+import type { Deps as D } from "../context.js";
 import { audit } from "../services/audit.js";
 import { collectSpendRules, publicCharge } from "../services/charges.js";
 import { assertAppAllowedForUser } from "../services/policies.js";
 import { issueUserToken } from "../services/user-tokens.js";
 
+const PENDING_TTL_MS = 10 * 60_000;
+const seal = (deps: D, v: unknown) => {
+  const json = JSON.stringify(v);
+  return deps.config.AIX_ENCRYPTION_KEY ? encryptSecret(json, deps.config.AIX_ENCRYPTION_KEY) : json;
+};
+const unseal = (deps: D, v: string | null) => {
+  if (v === null) return null;
+  return JSON.parse(v.startsWith("v1.") && deps.config.AIX_ENCRYPTION_KEY ? decryptSecret(v, deps.config.AIX_ENCRYPTION_KEY) : v);
+};
+
+/** Job helper: drop expired pending gateway actions. */
+export async function purgeGatewayPending(deps: D) {
+  const r = await deps.db.delete(gatewayPending).where(lt(gatewayPending.expiresAt, deps.now())).returning({ id: gatewayPending.id });
+  return r.length;
+}
+
 export async function gatewayRoutes(app: App, deps: Deps) {
+  /**
+   * Issue a nonce for a panel-only action (approval decision / install confirm). Shared by all
+   * gateway instances. Without `payload`, re-issues a nonce for an existing pending action.
+   */
+  app.post(
+    "/gateway/pending",
+    { schema: { tags: ["gateway"], body: z.object({ kind: z.enum(["approval", "install"]), ref: z.string().max(200), payload: z.record(z.string(), z.unknown()).optional() }) } },
+    async (req) => {
+      const u = await requireUser(deps, req);
+      const nonce = randomToken(16);
+      const where = and(eq(gatewayPending.userId, u.userId), eq(gatewayPending.kind, req.body.kind), eq(gatewayPending.ref, req.body.ref));
+      const expiresAt = new Date(deps.now().getTime() + PENDING_TTL_MS);
+      if (req.body.payload === undefined) {
+        const [row] = await deps.db.update(gatewayPending).set({ nonceHash: sha256Hex(nonce), expiresAt }).where(and(where, sql`${gatewayPending.expiresAt} > now()`)).returning();
+        if (!row) throw notFound("no pending action");
+        return { nonce, expiresAt };
+      }
+      await deps.db
+        .insert(gatewayPending)
+        .values({ id: newId("gwp"), userId: u.userId, kind: req.body.kind, ref: req.body.ref, payload: seal(deps, req.body.payload), nonceHash: sha256Hex(nonce), expiresAt })
+        .onConflictDoUpdate({ target: [gatewayPending.userId, gatewayPending.kind, gatewayPending.ref], set: { payload: seal(deps, req.body.payload), nonceHash: sha256Hex(nonce), expiresAt } });
+      return { nonce, expiresAt };
+    },
+  );
+
+  /** Consume a nonce exactly once; returns the stored payload and deletes the row. */
+  app.post(
+    "/gateway/pending/consume",
+    { schema: { tags: ["gateway"], body: z.object({ kind: z.enum(["approval", "install"]), ref: z.string().max(200), nonce: z.string().max(200) }) } },
+    async (req) => {
+      const u = await requireUser(deps, req);
+      const [row] = await deps.db
+        .select()
+        .from(gatewayPending)
+        .where(and(eq(gatewayPending.userId, u.userId), eq(gatewayPending.kind, req.body.kind), eq(gatewayPending.ref, req.body.ref)));
+      if (!row || row.expiresAt < deps.now() || !safeEqual(row.nonceHash, sha256Hex(req.body.nonce))) throw new ApiError(403, "forbidden", "invalid or expired panel action");
+      const del = await deps.db.delete(gatewayPending).where(and(eq(gatewayPending.id, row.id), eq(gatewayPending.nonceHash, row.nonceHash))).returning();
+      if (!del.length) throw new ApiError(403, "forbidden", "already used");
+      return { payload: unseal(deps, row.payload) };
+    },
+  );
+
   /** Server apps the user can call, with their MCP endpoints. */
   app.get("/gateway/apps", { schema: { tags: ["gateway"] } }, async (req) => {
     const u = await requireUser(deps, req);

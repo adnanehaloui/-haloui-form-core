@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: ["v3**", "claude/v3**", "main", "master"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: aix, POSTGRES_PASSWORD: aix, POSTGRES_DB: aix }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aix" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://aix:aix@localhost:5432/aix
+      TEST_DATABASE_URL: postgres://aix:aix@localhost:5432/aix_test
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Create test database
+        run: PGPASSWORD=aix psql -h localhost -U aix -d aix -c "CREATE DATABASE aix_test"
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Playwright happy path
+        run: |
+          npx playwright install --with-deps chromium
+          cp .env.example .env
+          pnpm db:migrate
+          pnpm seed
+          pnpm e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: playwright-report, retention-days: 7 }
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: |
+          for t in api gateway migrate web; do docker build --target $t -t aix-$t .; done

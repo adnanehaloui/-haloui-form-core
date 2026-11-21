@@ -13,6 +13,7 @@ The one MCP server a user adds to Claude / ChatGPT / Cursor / Claude Code: `http
   `X-AIX-Run-Id`. Afterwards it records an audit entry (app, tool, user, charge ids — never content) and appends a receipt.
 - **Panels (MCP Apps):** approval ("This costs €0.50 — approve?"), wallet/receipts, install/permissions.
   App UI resources are proxied under `ui://aix-app/<slug>/…`.
+- **Scales horizontally:** pending approvals / install nonces are stored (hashed, encrypted, single-use) in Postgres through the API.
 - Rate limit: `GATEWAY_RATE_LIMIT` requests/min per user (default 120).
 
 ```bash

@@ -64,7 +64,21 @@ tunnel (e.g. `cloudflared tunnel --url http://localhost:4100`, plus one for the 
 Prompt apps for Claude Code: `pnpm --filter @aix/api job:export-marketplace` writes `marketplace/`; then
 `/plugin marketplace add <path-or-git-url-of-marketplace>` and `/plugin install launch-copy@aix`.
 
-## 5. Jobs (cron in production)
+## 5. Containers and CI
+
+```bash
+docker compose -f docker-compose.full.yml up --build   # postgres, mailpit, migrate, api, gateway, web
+docker build --target api -t aix-api .                 # or gateway | migrate | web (--build-arg AIX_API_URL=…)
+```
+For a real deployment set `AIX_NODE_ENV=production` (the API then refuses to start without
+`AIX_ENCRYPTION_KEY`, `AIX_SIGNING_PRIVATE_KEY`, Stripe keys, and refuses `sk_live_` keys and dev endpoints) and
+public HTTPS URLs for `AIX_WEB_URL`, `AIX_API_URL`, `AIX_GATEWAY_URL`. Run `aix-api` with
+`pnpm job:…` commands on a schedule for jobs.
+
+CI (`.github/workflows/ci.yml`): typecheck, all test suites against Postgres, the Playwright happy path, and the
+four Docker images.
+
+## 6. Jobs (cron in production)
 
 ```bash
 pnpm --filter @aix/api job:expire-holds          # every minute

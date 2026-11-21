@@ -9,7 +9,7 @@ Developers publish with an SDK and get paid without writing login or billing cod
 - Open questions: [`docs/open-questions.md`](docs/open-questions.md)
 - Running locally: [`docs/running-locally.md`](docs/running-locally.md)
 
-**Status:** M0–M6 implemented (test mode). `pnpm test` runs 62 tests incl. end-to-end M1–M6 criteria; `pnpm e2e` runs the Playwright happy path.
+**Status:** M0–M6 implemented (test mode). `pnpm test` runs 63 tests incl. end-to-end M1–M6 criteria; `pnpm e2e` runs the Playwright happy path; CI and Docker images included.
 
 | Path | What |
 |---|---|

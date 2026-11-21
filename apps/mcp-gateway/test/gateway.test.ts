@@ -32,6 +32,8 @@ let ctx: Ctx;
 let apiUrl: string;
 let gatewayUrl: string;
 let gateway: ReturnType<typeof createGatewayHttpServer>;
+let gateway2: ReturnType<typeof createGatewayHttpServer>;
+let gateway2Url: string;
 let appProc: ChildProcess;
 let userCookie: string;
 let accessToken: string;
@@ -46,6 +48,11 @@ beforeAll(async () => {
   await ctx.app.listen({ port: apiPort, host: "127.0.0.1" });
   gateway = createGatewayHttpServer({ port: gwPort, gatewayUrl, apiUrl, rateLimitPerMinute: 1000 });
   await new Promise<void>((ok) => gateway.listen(gwPort, "127.0.0.1", ok));
+  // A second, independent gateway instance (same resource URL) to prove state is shared via the API.
+  const gw2Port = await freePort();
+  gateway2Url = `http://127.0.0.1:${gw2Port}`;
+  gateway2 = createGatewayHttpServer({ port: gw2Port, gatewayUrl, apiUrl, rateLimitPerMinute: 1000 });
+  await new Promise<void>((ok) => gateway2.listen(gw2Port, "127.0.0.1", ok));
   resetGatewayState();
 
   // Developer: create the sample server app with the CLI code path and publish it.
@@ -88,12 +95,13 @@ beforeAll(async () => {
 afterAll(async () => {
   appProc?.kill();
   await new Promise((ok) => gateway?.close(ok));
+  await new Promise((ok) => gateway2?.close(ok));
   await ctx?.close();
 });
 
-async function mcp(token = accessToken) {
+async function mcp(token = accessToken, base = gatewayUrl) {
   const client = new Client({ name: "test-host", version: "1.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${gatewayUrl}/mcp`), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), { requestInit: { headers: { authorization: `Bearer ${token}` } } }));
   return client;
 }
 
@@ -191,7 +199,12 @@ describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () =>
     // Without the panel's nonce the model can't approve.
     expect(((await c.callTool({ name: "approval_decide", arguments: { approvalId, decision: "approve", nonce: "nope" } })) as any).isError).toBe(true);
 
-    const done: any = await c.callTool({ name: "approval_decide", arguments: { approvalId, decision: "approve", nonce } });
+    // Decided on a DIFFERENT gateway instance: pending state lives in Postgres, not in memory.
+    const c2 = await mcp(accessToken, gateway2Url);
+    const done: any = await c2.callTool({ name: "approval_decide", arguments: { approvalId, decision: "approve", nonce } });
+    // A nonce works once.
+    expect(((await c2.callTool({ name: "approval_decide", arguments: { approvalId, decision: "approve", nonce } })) as any).isError).toBe(true);
+    await c2.close();
     expect(done.isError).toBeFalsy();
     expect(done.structuredContent.status).toBe("approved");
     expect(done.structuredContent.frames).toHaveLength(3);

@@ -19,8 +19,9 @@ Simple-first choices. Each entry: decision — why — revisit when.
 ## D4. Commission as integer basis points; platform share rounded down
 - **Why:** no floats in money code; split always sums exactly; rounding favours the developer.
 
-## D5. Jobs are plain idempotent scripts; developer webhooks are single-attempt
-- **Why:** no queue dependency for an MVP. **Revisit:** `pg-boss` (Postgres-backed) for retries.
+## D5. Jobs are plain idempotent scripts; developer webhooks retry in-process
+- **Why:** no queue dependency for an MVP. Webhooks get 4 attempts (0s, 1s, 5s, 30s backoff), same event id,
+  re-signed per attempt; 4xx (except 408/429) stops retries. **Revisit:** `pg-boss` for durable retries across restarts.
 
 ## D6. Web talks to the API through a same-origin `/api/*` rewrite
 - **Why:** one source of business logic; the session cookie stays first-party. No direct DB access from `web`.
@@ -53,9 +54,10 @@ Simple-first choices. Each entry: decision — why — revisit when.
 - The spec names `@modelcontextprotocol/sdk` (v1). ext-apps 2.x targets the split v2 SDK packages, so we pin
   `@modelcontextprotocol/ext-apps@~1.7` which pairs with SDK v1. **Revisit:** migrate both to v2 together.
 
-## D15. Gateway is stateless per request; pending approvals live in memory
-- **Why:** simplest correct thing for one instance. **Revisit:** move pending approvals/nonces to Postgres or Redis
-  before running more than one gateway instance.
+## D15. Gateway is stateless; pending approvals/install nonces live in Postgres (via the API)
+- `gateway_pending` stores only the nonce's SHA-256 and an AES-GCM-encrypted payload (the original tool call), is
+  single-use (row deleted on consume) and expires after 10 minutes (`job:expire-holds` purges leftovers). Any
+  number of gateway instances can serve a user — tested by deciding an approval on a second instance.
 
 ## D16. Package format `aixpkg/1` = gzip(JSON of files)
 - No tar dependency; deterministic; path traversal rejected; 10 MB cap. Hash on upload, signed on approval,
@@ -66,3 +68,5 @@ Simple-first choices. Each entry: decision — why — revisit when.
 ## D19. Subscriptions are paid by card through Stripe Billing, not from the wallet
 ## D20. Package storage on the local filesystem behind a `Storage` interface (swap for S3/R2 later)
 ## D21. In development without keys: generated signing key in `.storage/`, fake Stripe checkout page
+## D22. One multi-target Dockerfile; API and gateway run TypeScript with tsx in production
+- **Why:** no separate bundling step to maintain. Images: `api`, `gateway`, `migrate`, `web`. **Revisit:** compile to JS for faster cold starts.

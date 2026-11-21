@@ -6,7 +6,6 @@
  * App-only tools (called from MCP Apps panels, hidden from the model): approval_decide, app_install_confirm
  * Plus every installed server app's tools, namespaced `<slug>__<tool>` and proxied to the developer.
  */
-import { randomBytes } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -19,22 +18,12 @@ import { approvalPanel, installPanel, PANELS, walletPanel } from "./panels.js";
 const SEP = "__";
 const APP_UI_PREFIX = "ui://aix-app/";
 
-// ---- Shared in-memory state (single instance MVP; see docs/decisions.md) -------------------
-
-interface PendingCall { userId: string; slug: string; tool: string; args: Record<string, unknown>; runId: string; nonce: string; expires: number }
-const pendingApprovals = new Map<string, PendingCall>();
-const installNonces = new Map<string, { userId: string; slug: string; expires: number }>();
+// Pending approvals / install nonces live in the AIX API (Postgres), so any number of gateway
+// instances can serve the same user. Only the downstream tool-list cache is per instance.
+interface PendingCall { slug: string; tool: string; args: Record<string, unknown>; runId: string }
 const toolCache = new Map<string, { tools: Tool[]; expires: number }>();
 
-function sweep() {
-  const now = Date.now();
-  for (const [k, v] of pendingApprovals) if (v.expires < now) pendingApprovals.delete(k);
-  for (const [k, v] of installNonces) if (v.expires < now) installNonces.delete(k);
-}
-
 export function resetGatewayState() {
-  pendingApprovals.clear();
-  installNonces.clear();
   toolCache.clear();
 }
 
@@ -169,8 +158,8 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
 
     const sc = result.structuredContent as any;
     if (sc?.aix?.type === "needs_user_approval" && sc.aix.approvalId) {
-      sweep();
-      pendingApprovals.set(sc.aix.approvalId, { userId: user.userId, slug, tool, args, runId: auth.runId, nonce: randomBytes(16).toString("hex"), expires: Date.now() + 10 * 60_000 });
+      const pending: PendingCall = { slug, tool, args, runId: auth.runId };
+      await api.post("/gateway/pending", { kind: "approval", ref: sc.aix.approvalId, payload: pending });
       result = { ...result, content: [...result.content, text(`To continue, call aix_approve with approvalId "${sc.aix.approvalId}" so the user can approve ${sc.aix.display ?? "the charge"}.`)] };
     }
     const paid = done.charges.filter((c) => c.status === "captured" && c.amountCents > 0);
@@ -221,9 +210,7 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
         case "app_install": {
           const a = await api.get<any>(`/store/apps/${encodeURIComponent(String(args.slug))}`);
           const me = await api.get<any>("/me");
-          sweep();
-          const nonce = randomBytes(16).toString("hex");
-          installNonces.set(nonce, { userId: user.userId, slug: a.slug, expires: Date.now() + 10 * 60_000 });
+          const { nonce } = await api.post<{ nonce: string }>("/gateway/pending", { kind: "install", ref: a.slug, payload: {} });
           const storeUrl = `${me.webUrl ?? webUrl}/apps/${a.slug}`;
           const app = {
             slug: a.slug,
@@ -244,9 +231,11 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
           };
         }
         case "app_install_confirm": {
-          const n = installNonces.get(String(args.nonce));
-          if (!n || n.userId !== user.userId || n.slug !== args.slug) return errorResult("This install request expired — run app_install again.");
-          installNonces.delete(String(args.nonce));
+          try {
+            await api.post("/gateway/pending/consume", { kind: "install", ref: String(args.slug), nonce: String(args.nonce) });
+          } catch {
+            return errorResult("This install request expired or can only be confirmed from its panel — run app_install again.");
+          }
           await api.post(`/store/apps/${encodeURIComponent(String(args.slug))}/install`, { acceptPermissions: true });
           toolCache.clear();
           return { content: [text(`Installed ${args.slug}. Its tools are now available as ${args.slug}${SEP}<tool>.`)] };
@@ -262,21 +251,24 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
         }
         case "aix_approve": {
           const a = await api.get<any>(`/approvals/${encodeURIComponent(String(args.approvalId))}`);
-          const p = pendingApprovals.get(a.id);
+          const issued = await api.post<{ nonce: string }>("/gateway/pending", { kind: "approval", ref: a.id }).catch(() => null);
           const me = await api.get<any>("/me");
           const approvalUrl = `${me.webUrl ?? webUrl}/approve/${a.id}`;
           return {
             content: [text(`${a.app.name} wants to charge ${a.display} (${a.quantity} × ${a.unit}). Waiting for the user to approve or deny in the panel, or at ${approvalUrl}.`)],
             structuredContent: { approval: { ...a, approvalUrl } },
-            ...(p && p.userId === user.userId ? { _meta: { "aix/nonce": p.nonce } } : {}),
+            ...(issued && a.status === "pending" ? { _meta: { "aix/nonce": issued.nonce } } : {}),
           };
         }
         case "approval_decide": {
-          const p = pendingApprovals.get(String(args.approvalId));
-          if (!p || p.userId !== user.userId || p.nonce !== args.nonce) return errorResult("This approval can only be decided from its approval panel, or on the AIX website.");
+          let p: PendingCall;
+          try {
+            p = (await api.post<{ payload: PendingCall }>("/gateway/pending/consume", { kind: "approval", ref: String(args.approvalId), nonce: String(args.nonce) })).payload;
+          } catch {
+            return errorResult("This approval can only be decided from its approval panel, or on the AIX website.");
+          }
           const decision = args.decision === "approve" ? "approve" : "deny";
           await api.post(`/approvals/${encodeURIComponent(String(args.approvalId))}/decision`, { decision });
-          pendingApprovals.delete(String(args.approvalId));
           if (decision === "deny") return { content: [text("Charge declined. Nothing was charged.")], structuredContent: { status: "denied" } };
           // Re-run the original call with the SAME run id → same idempotency key → the approved charge.
           const r = await callAppTool(p.slug, p.tool, p.args, p.runId);
