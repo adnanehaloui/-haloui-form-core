@@ -3,13 +3,64 @@
   "name": "Render Studio",
   "version": "1.0.0",
   "type": "server",
-  "description": "Turn a short script into a storyboard video render. Sample AIX server app with one paid tool and a preview panel.",
+  "description": "Write a short script, get a shot-by-shot storyboard render you can hand to an editor or post as a teaser. Works right inside your AI chat.",
   "category": "video",
-  "entry": { "mcp": "http://localhost:4200/mcp" },
-  "compatibility": { "hosts": ["claude", "chatgpt", "cursor", "claude-code", "web"] },
-  "permissions": { "network": ["http://localhost:4200"], "files": [], "userData": ["email"] },
+  "entry": {
+    "mcp": "http://localhost:4200/mcp"
+  },
+  "compatibility": {
+    "hosts": [
+      "claude",
+      "chatgpt",
+      "cursor",
+      "claude-code",
+      "web"
+    ]
+  },
+  "permissions": {
+    "network": [
+      "http://localhost:4200"
+    ],
+    "files": [],
+    "userData": [
+      "email"
+    ]
+  },
   "pricing": [
-    { "kind": "free", "includedUnits": 3, "unit": "render" },
-    { "kind": "metered", "unit": "render", "displayPrice": "€0.50" }
+    {
+      "kind": "free",
+      "includedUnits": 3,
+      "unit": "render"
+    },
+    {
+      "kind": "metered",
+      "unit": "render",
+      "displayPrice": "\u20ac0.50"
+    }
+  ],
+  "tagline": "Turn a script into a video storyboard",
+  "icon": "assets/icon.svg",
+  "color": "#7c3aed",
+  "showcase": [
+    {
+      "title": "Product launch video",
+      "input": "Make an 18s launch video for our new running shoe: light, fast, recycled.",
+      "kind": "image",
+      "output": "assets/storyboard.svg",
+      "caption": "6 shots \u00b7 18s \u00b7 \u20ac0.50"
+    },
+    {
+      "title": "Shot list",
+      "input": "Give me the shot list for a 15s coffee ad.",
+      "kind": "list",
+      "output": [
+        "Macro pour over steaming cup",
+        "Barista smile, shallow focus",
+        "Steam swirl transition",
+        "Logo on cup, morning light",
+        "Tagline: \u201cYour 7am, perfected.\u201d"
+      ],
+      "caption": "Free render (3 included)"
+    }
   ]
 }

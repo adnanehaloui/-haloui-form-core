@@ -33,7 +33,7 @@ test("sign up, top up, install, get charged", async ({ page, request }) => {
   await expect(page).toHaveURL(/topup=success/);
   await expect(page.getByTestId("balance")).toHaveText("€20.00");
 
-  await page.goto("/?q=render");
+  await page.goto("/search?q=render");
   await page.getByTestId("store-app").filter({ hasText: "Render Studio" }).click();
   await expect(page.getByText("€0.50 / render (first 3 free)")).toBeVisible();
   await page.waitForLoadState("networkidle");

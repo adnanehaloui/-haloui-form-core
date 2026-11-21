@@ -12,7 +12,9 @@ import { eq } from "drizzle-orm";
 import { apiKeys, developers, ledgerTransactions, orgMembers, organizations, sessions, users } from "@aix/db";
 import { newId, postSeedCredit, randomToken, sha256Hex } from "@aix/core";
 import { initApp, packApp } from "@aix/cli";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { dirname } from "node:path";
+import { DEMO_APPS, demoFiles } from "./demo-catalog.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runMigrations } from "@aix/db";
@@ -84,6 +86,47 @@ for (const s of SAMPLES) {
   } else {
     const list = (await app.inject({ method: "GET", url: "/developer", headers: auth })).json();
     slugs[s.id] = list.apps.find((a: any) => a.manifestId === s.id)?.slug;
+  }
+}
+
+// Demo catalog: more apps with icons, showcase results, installs and reviews.
+for (const d of DEMO_APPS) {
+  const dir = await mkdtemp(join(tmpdir(), "aix-demo-"));
+  for (const [p, c] of Object.entries(demoFiles(d))) {
+    await mkdir(dirname(join(dir, p)), { recursive: true });
+    await writeFile(join(dir, p), c);
+  }
+  const { pkg } = await packApp(dir);
+  const pub = await app.inject({ method: "POST", url: "/developer/publish", headers: auth, payload: { packageBase64: pkg.toString("base64") } });
+  if (pub.statusCode === 200) {
+    slugs[d.id] = pub.json().slug;
+    const price = d.price?.kind === "subscription" ? { kind: "subscription", unit: "month", unitAmountCents: d.price.unitAmountCents, interval: "month", lookupKey: "pro" } : { kind: "free", unit: "use", unitAmountCents: 0 };
+    await app.inject({ method: "POST", url: `/developer/apps/${pub.json().slug}/prices`, headers: auth, payload: price });
+    await app.inject({ method: "POST", url: `/admin/versions/${pub.json().versionId}/approve`, headers: { cookie: adminCookie }, payload: { notes: "seed" } });
+  } else {
+    const list = (await app.inject({ method: "GET", url: "/developer", headers: auth })).json();
+    slugs[d.id] = list.apps.find((a: any) => a.manifestId === d.id)?.slug;
+  }
+}
+
+// Demo users install apps and leave reviews (real installs/reviews → real counts and ratings).
+const SAMPLE_SOCIAL: Record<string, { installs: number; reviews: [number, string][] }> = {
+  "com.acme.renderstudio": { installs: 16, reviews: [[5, "Storyboards in seconds. The approval prompt makes paid runs feel safe."], [5, "Used it straight from Claude — no new account."], [4, "Love the preview panel."]] },
+  "com.acme.launchcopy": { installs: 12, reviews: [[5, "My changelogs finally read like a human wrote them."], [4, "Great for launch tweets."]] },
+  "com.acme.quicknotes": { installs: 4, reviews: [[4, "Summaries are crisp. €0.20 is fair."]] },
+};
+const social = [...DEMO_APPS.map((d) => ({ id: d.id, installs: d.installs, reviews: d.reviews })), ...Object.entries(SAMPLE_SOCIAL).map(([id, v]) => ({ id, ...v }))];
+const NAMES = ["Maya", "Jonas", "Priya", "Luca", "Sofia", "Kenji", "Amara", "Tom", "Elena", "Omar", "Ines", "Felix", "Hana", "Diego", "Nora", "Sam", "Lea", "Ravi"];
+const fans = [];
+for (const [i, n] of NAMES.entries()) fans.push({ user: await user(`fan${i + 1}@aix.local`, n), i });
+for (const a of social) {
+  const slug = slugs[a.id];
+  if (!slug) continue;
+  for (const { user: u, i } of fans.slice(0, a.installs)) {
+    const cookie = await sessionCookie(u.id);
+    await app.inject({ method: "POST", url: `/store/apps/${slug}/install`, headers: { cookie }, payload: { acceptPermissions: true } });
+    const r = a.reviews[i];
+    if (r) await app.inject({ method: "POST", url: `/store/apps/${slug}/reviews`, headers: { cookie }, payload: { rating: r[0], body: r[1] } });
   }
 }
 

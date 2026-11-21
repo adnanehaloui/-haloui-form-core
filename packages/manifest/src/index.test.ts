@@ -34,6 +34,12 @@ describe("manifest", () => {
     const r = validateManifest({ ...sample, type: "prompt", entry: { mcp: "https://api.acme.com/mcp" } });
     expect(r.ok).toBe(false);
   });
+  it("validates listing extras (icon, showcase)", () => {
+    const ok = validateManifest({ ...sample, icon: "assets/icon.svg", tagline: "Script to video", showcase: [{ title: "Launch video", input: "Make a 20s video", kind: "image", output: "assets/frame.png" }, { title: "Shot list", input: "x", kind: "list", output: ["a", "b"] }] });
+    expect(ok.errors).toEqual([]);
+    expect(validateManifest({ ...sample, icon: "../secret.png" }).ok).toBe(false);
+    expect(validateManifest({ ...sample, showcase: [{ title: "x1", input: "y", kind: "image", output: "javascript:alert(1)" }] }).ok).toBe(false);
+  });
   it("describes permissions", () => {
     expect(describePermissions(validateManifest(sample).manifest!)).toEqual(["Connect to https://api.acme.com", "Read your email"]);
   });

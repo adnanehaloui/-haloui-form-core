@@ -5,8 +5,37 @@
   "type": "prompt",
   "description": "Skills for writing product launch announcements, changelogs and release emails.",
   "category": "writing",
-  "compatibility": { "hosts": ["claude", "claude-code", "chatgpt", "cursor"] },
-  "permissions": { "network": [], "files": [], "userData": [] },
-  "skills": ["skills/launch-announcement.md", "skills/changelog.md"],
-  "pricing": [{ "kind": "free" }]
+  "compatibility": {
+    "hosts": [
+      "claude",
+      "claude-code",
+      "chatgpt",
+      "cursor"
+    ]
+  },
+  "permissions": {
+    "network": [],
+    "files": [],
+    "userData": []
+  },
+  "skills": [
+    "skills/launch-announcement.md",
+    "skills/changelog.md"
+  ],
+  "pricing": [
+    {
+      "kind": "free"
+    }
+  ],
+  "tagline": "Launch posts and changelogs in seconds",
+  "icon": "assets/icon.svg",
+  "color": "#ea580c",
+  "showcase": [
+    {
+      "title": "Launch announcement",
+      "input": "Announce dark mode for our notes app",
+      "kind": "text",
+      "output": "Your notes, now easy on the eyes. 🌙\n\n• Dark mode is live on web, iOS and Android\n• Follows your system setting automatically\n• Great for late-night writing sessions\n\nUpdate the app and flip the switch in Settings → Appearance."
+    }
+  ]
 }

@@ -17,6 +17,18 @@ const pricingEntry = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("metered"), unit: z.string().min(1), displayPrice: z.string().optional() }),
 ]);
 
+const showcaseEntry = z.object({
+  title: z.string().min(2).max(80),
+  /** What the user asked (shown as a chat bubble). */
+  input: z.string().max(500),
+  kind: z.enum(["text", "image", "table", "list"]),
+  /** text: Markdown-ish text. image: package path or https URL. table: rows (first row = header). list: items. */
+  output: z.union([z.string().max(4000), z.array(z.string().max(500)).max(20), z.array(z.array(z.string().max(200)).max(8)).max(20)]),
+  /** Optional caption, e.g. "Rendered in 40s · €0.50". */
+  caption: z.string().max(120).optional(),
+});
+export type ShowcaseEntry = z.infer<typeof showcaseEntry>;
+
 export const manifestSchema = z
   .object({
     $schema: z.string().optional(),
@@ -45,6 +57,16 @@ export const manifestSchema = z
     pricing: z.array(pricingEntry).default([]),
     /** prompt apps: Markdown skill files shipped in the package */
     skills: z.array(z.string()).optional(),
+    /** Store listing extras (all optional). */
+    tagline: z.string().max(80).optional(),
+    /** Package-relative path (png/svg/jpg/webp) or https URL. */
+    icon: z.string().max(300).optional(),
+    /** Brand color for the listing, e.g. "#6d28d9". */
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    /** Package-relative image paths. */
+    screenshots: z.array(z.string().max(300)).max(8).default([]),
+    /** Example runs shown on the store page: what you ask → what you get. */
+    showcase: z.array(showcaseEntry).max(6).default([]),
   })
   .superRefine((m, ctx) => {
     if (m.type === "server" && !m.entry.mcp) ctx.addIssue({ code: "custom", path: ["entry", "mcp"], message: "server apps need entry.mcp" });
@@ -53,6 +75,15 @@ export const manifestSchema = z
     if (m.type === "prompt" && (m.entry.mcp || m.entry.command)) {
       ctx.addIssue({ code: "custom", path: ["entry"], message: "prompt apps cannot run code (no entry.mcp / entry.command)" });
     }
+    const isAsset = (p: string) => /^https:\/\//.test(p) || /^[\w./-]+\.(png|jpe?g|svg|webp)$/i.test(p) && !p.includes("..");
+    if (m.icon && !isAsset(m.icon)) ctx.addIssue({ code: "custom", path: ["icon"], message: "icon must be a png/jpg/svg/webp path in the package or an https URL" });
+    m.screenshots.forEach((p, i) => !isAsset(p) && ctx.addIssue({ code: "custom", path: ["screenshots", i], message: "must be an image path in the package or an https URL" }));
+    m.showcase.forEach((sc, i) => {
+      if (sc.kind === "image" && (typeof sc.output !== "string" || !isAsset(sc.output))) ctx.addIssue({ code: "custom", path: ["showcase", i, "output"], message: "image output must be an image path or https URL" });
+      if (sc.kind === "text" && typeof sc.output !== "string") ctx.addIssue({ code: "custom", path: ["showcase", i, "output"], message: "text output must be a string" });
+      if (sc.kind === "list" && !(Array.isArray(sc.output) && sc.output.every((x) => typeof x === "string"))) ctx.addIssue({ code: "custom", path: ["showcase", i, "output"], message: "list output must be an array of strings" });
+      if (sc.kind === "table" && !(Array.isArray(sc.output) && sc.output.every((r) => Array.isArray(r)))) ctx.addIssue({ code: "custom", path: ["showcase", i, "output"], message: "table output must be an array of rows" });
+    });
     // Server/web apps may only reach the hosts they declare.
     for (const url of [m.entry.mcp, m.entry.web].filter(Boolean) as string[]) {
       const origin = new URL(url).origin;
@@ -79,6 +110,8 @@ export function validateManifest(input: unknown): ValidationResult {
   }
   const warnings: string[] = [];
   const m = r.data;
+  if (!m.icon) warnings.push("no icon — listings with an icon get far more installs (add \"icon\": \"assets/icon.svg\").");
+  if (m.showcase.length === 0) warnings.push("no showcase — add 1–3 example results (\"showcase\") so users see what your app makes.");
   if (m.type === "local" && m.permissions.files.length === 0) warnings.push("local app declares no file permissions — is that right?");
   if (m.pricing.some((p) => "displayPrice" in p && p.displayPrice)) {
     warnings.push("displayPrice is for store listings only; real prices are set in the AIX catalog (aix prices create).");
@@ -107,3 +140,13 @@ export function manifestJsonSchema() {
   return z.toJSONSchema(manifestSchema, { io: "input" });
 }
 export * from "./package.js";
+
+/** Package files the store may serve publicly (listing images only). */
+export function listingAssetPaths(m: Pick<Manifest, "icon" | "screenshots" | "showcase">): string[] {
+  const out = new Set<string>();
+  const add = (p?: unknown) => typeof p === "string" && !/^https:/.test(p) && /\.(png|jpe?g|svg|webp)$/i.test(p) && out.add(p);
+  add(m.icon);
+  m.screenshots.forEach(add);
+  m.showcase.forEach((s) => s.kind === "image" && add(s.output));
+  return [...out];
+}

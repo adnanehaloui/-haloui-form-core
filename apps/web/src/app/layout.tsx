@@ -11,10 +11,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body className="min-h-screen font-sans antialiased">
-        <header className="border-b border-line">
+        <header className="sticky top-0 z-20 border-b border-line bg-[light-dark(rgba(255,255,255,.82),rgba(17,17,20,.82))] backdrop-blur">
           <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-sm">
-            <Link href="/" className="text-base font-bold tracking-tight">AIX</Link>
-            <Link href="/" className="text-muted hover:text-ink">Store</Link>
+            <Link href="/" className="flex items-center gap-2 text-base font-bold tracking-tight">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-xs text-white">A</span>AIX
+            </Link>
+            <form action="/search" className="order-last w-full sm:order-none sm:w-auto sm:flex-1 sm:max-w-sm">
+              <input name="q" placeholder="Search apps and results" aria-label="Search apps" className="w-full rounded-full border border-line bg-card px-4 py-1.5 text-sm outline-none focus:border-accent" />
+            </form>
+            <Link href="/" className="text-muted hover:text-ink">Discover</Link>
+            <Link href="/search" className="text-muted hover:text-ink">Apps</Link>
             {me && <Link href="/wallet" className="text-muted hover:text-ink">Wallet</Link>}
             {me && <Link href="/developer" className="text-muted hover:text-ink">Developers</Link>}
             {me && <Link href="/orgs" className="text-muted hover:text-ink">Organizations</Link>}

@@ -5,8 +5,44 @@
   "type": "web",
   "description": "A tiny web app that uses Sign in with AIX and charges €0.20 per AI summary from the AIX wallet.",
   "category": "productivity",
-  "entry": { "web": "http://localhost:4300" },
-  "compatibility": { "hosts": ["web"] },
-  "permissions": { "network": [], "files": [], "userData": ["email", "name"] },
-  "pricing": [{ "kind": "metered", "unit": "summary", "displayPrice": "€0.20" }]
+  "entry": {
+    "web": "http://localhost:4300"
+  },
+  "compatibility": {
+    "hosts": [
+      "web"
+    ]
+  },
+  "permissions": {
+    "network": [],
+    "files": [],
+    "userData": [
+      "email",
+      "name"
+    ]
+  },
+  "pricing": [
+    {
+      "kind": "metered",
+      "unit": "summary",
+      "displayPrice": "€0.20"
+    }
+  ],
+  "tagline": "Notes that summarize themselves",
+  "icon": "assets/icon.svg",
+  "color": "#16a34a",
+  "showcase": [
+    {
+      "title": "Meeting summary",
+      "input": "Summarize my notes from the Q3 planning call",
+      "kind": "list",
+      "output": [
+        "Ship onboarding v2 by Sept 15 (Maya)",
+        "Cut churn 10% — test annual pricing",
+        "Hire 2 support engineers in EU",
+        "Next sync: Thursday 10:00"
+      ],
+      "caption": "€0.20 per summary"
+    }
+  ]
 }

@@ -5,8 +5,62 @@
   "type": "local",
   "description": "Counts files and lines of code in a local folder. Runs on your machine; nothing is uploaded.",
   "category": "code",
-  "entry": { "command": "bin/repo-stats.mjs" },
-  "compatibility": { "hosts": ["claude-code", "cursor"] },
-  "permissions": { "network": [], "files": ["read: current project folder"], "userData": [] },
-  "pricing": [{ "kind": "free" }]
+  "entry": {
+    "command": "bin/repo-stats.mjs"
+  },
+  "compatibility": {
+    "hosts": [
+      "claude-code",
+      "cursor"
+    ]
+  },
+  "permissions": {
+    "network": [],
+    "files": [
+      "read: current project folder"
+    ],
+    "userData": []
+  },
+  "pricing": [
+    {
+      "kind": "free"
+    }
+  ],
+  "tagline": "See what's in any codebase",
+  "icon": "assets/icon.svg",
+  "color": "#0891b2",
+  "showcase": [
+    {
+      "title": "Repo breakdown",
+      "input": "What's in this repo?",
+      "kind": "table",
+      "output": [
+        [
+          "Language",
+          "Files",
+          "Lines"
+        ],
+        [
+          ".ts",
+          "142",
+          "18,420"
+        ],
+        [
+          ".tsx",
+          "38",
+          "4,910"
+        ],
+        [
+          ".md",
+          "21",
+          "1,302"
+        ],
+        [
+          ".sql",
+          "3",
+          "214"
+        ]
+      ]
+    }
+  ]
 }

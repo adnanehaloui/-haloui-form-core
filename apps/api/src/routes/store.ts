@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { and, avg, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { apps, appVersions, developers, installs, orgAppPolicies, orgMembers, prices, reviews, users } from "@aix/db";
 import { formatMoney, newId } from "@aix/core";
-import { CATEGORIES, describePermissions, sha256, signingPayload, type Manifest } from "@aix/manifest";
+import { CATEGORIES, describePermissions, listingAssetPaths, sha256, signingPayload, unpackFiles, type Manifest } from "@aix/manifest";
 import type { App, Deps } from "../context.js";
 import { getUser, requireOrgRole, requireSessionUser, requireUser } from "../lib/auth.js";
 import { ApiError, badRequest, conflict, forbidden, notFound } from "../lib/errors.js";
@@ -89,6 +89,32 @@ export async function installApp(deps: Deps, userId: string, slug: string, opts:
   });
 }
 
+// ---- Listing helpers ---------------------------------------------------------------------------
+
+const assetUrl = (deps: Deps, slug: string, versionId: string, p: string) =>
+  /^https:\/\//.test(p) ? p : `${deps.config.AIX_WEB_URL}/api/store/apps/${slug}/assets/${versionId}/${p.split("/").map(encodeURIComponent).join("/")}`;
+
+export function listing(deps: Deps, a: typeof apps.$inferSelect, v: typeof appVersions.$inferSelect) {
+  const m = v.manifest as Manifest;
+  return {
+    tagline: m.tagline ?? null,
+    color: m.color ?? null,
+    iconUrl: m.icon ? assetUrl(deps, a.slug, v.id, m.icon) : null,
+    screenshots: (m.screenshots ?? []).map((p) => assetUrl(deps, a.slug, v.id, p)),
+    showcase: (m.showcase ?? []).map((sc) => (sc.kind === "image" && typeof sc.output === "string" ? { ...sc, output: assetUrl(deps, a.slug, v.id, sc.output) } : sc)),
+  };
+}
+
+async function installCounts(deps: Deps, appIds: string[]) {
+  if (!appIds.length) return new Map<string, number>();
+  const rows = await deps.db
+    .select({ appId: installs.appId, n: count() })
+    .from(installs)
+    .where(and(inArray(installs.appId, appIds), isNull(installs.uninstalledAt)))
+    .groupBy(installs.appId);
+  return new Map(rows.map((r) => [r.appId, r.n]));
+}
+
 export async function storeSearch(deps: Deps, q: { q?: string | undefined; category?: string | undefined; type?: string | undefined; host?: string | undefined; limit?: number }) {
   const rows = await deps.db
     .select({ app: apps, version: appVersions, developer: developers.displayName })
@@ -106,6 +132,7 @@ export async function storeSearch(deps: Deps, q: { q?: string | undefined; categ
     )
     .orderBy(desc(apps.createdAt))
     .limit(q.limit ?? 50);
+  const counts = await installCounts(deps, rows.map((r) => r.app.id));
   const out = [];
   for (const r of rows) {
     const ps = await deps.db.select().from(prices).where(and(eq(prices.appId, r.app.id), eq(prices.active, true)));
@@ -121,7 +148,11 @@ export async function storeSearch(deps: Deps, q: { q?: string | undefined; categ
       developer: r.developer,
       hosts: m.compatibility.hosts,
       priceLabels: ps.map(priceLabel),
+      isFree: ps.every((p) => p.kind === "free" || p.unitAmountCents === 0) || ps.some((p) => p.includedUnits > 0),
       rating: rv?.n ? { average: Number(Number(rv.avg).toFixed(1)), count: rv.n } : null,
+      installs: counts.get(r.app.id) ?? 0,
+      createdAt: r.app.createdAt,
+      ...listing(deps, r.app, r.version),
     });
   }
   return out;
@@ -129,6 +160,51 @@ export async function storeSearch(deps: Deps, q: { q?: string | undefined; categ
 
 export async function storeRoutes(app: App, deps: Deps) {
   app.get("/store/categories", { schema: { tags: ["store"] } }, async () => ({ data: CATEGORIES }));
+
+  /** Curated home: featured apps (with showcase results) and rows, like an app store front page. */
+  app.get("/store/home", { schema: { tags: ["store"] } }, async () => {
+    const all = await storeSearch(deps, { limit: 200 });
+    const score = (a: (typeof all)[number]) => a.installs * 2 + (a.rating ? a.rating.average * a.rating.count : 0) + a.showcase.length;
+    const byScore = [...all].sort((x, y) => score(y) - score(x));
+    const featured = byScore.filter((a) => a.showcase.length > 0).slice(0, 5);
+    const sections = [
+      { id: "top", title: "Top apps", subtitle: "Most installed this month", apps: byScore.slice(0, 12) },
+      { id: "new", title: "New & noteworthy", subtitle: "Fresh from developers", apps: [...all].sort((x, y) => +new Date(y.createdAt) - +new Date(x.createdAt)).slice(0, 12) },
+      { id: "free", title: "Try for free", subtitle: "Free or with free runs included", apps: byScore.filter((a) => a.isFree).slice(0, 12) },
+      // Category rows only when they'd look full; smaller categories are reached from the category grid.
+      ...CATEGORIES.map((c) => ({ id: `cat-${c}`, title: c, subtitle: null, category: c, apps: byScore.filter((a) => a.category === c).slice(0, 12) })).filter((s) => s.apps.length >= 3),
+    ].filter((s) => s.apps.length > 0);
+    return { featured, sections, total: all.length };
+  });
+
+  /**
+   * Listing images (icon, screenshots, showcase images) served from the SIGNED package.
+   * Only paths the manifest declares as listing assets; SVG is sandboxed (no scripts).
+   */
+  const assetCache = new Map<string, Map<string, Buffer>>();
+  app.get("/store/apps/:slug/assets/:versionId/*", { schema: { tags: ["store"], hide: true, params: z.object({ slug: z.string(), versionId: z.string(), "*": z.string() }) } }, async (req, reply) => {
+    const [row] = await deps.db.select({ app: apps, version: appVersions }).from(appVersions).innerJoin(apps, eq(apps.id, appVersions.appId)).where(and(eq(apps.slug, req.params.slug), eq(appVersions.id, req.params.versionId)));
+    if (!row || row.app.status !== "published" || row.version.status !== "approved") throw notFound("asset not found");
+    const path = req.params["*"];
+    if (!listingAssetPaths(row.version.manifest as Manifest).includes(path)) throw notFound("asset not found");
+    let files = assetCache.get(row.version.id);
+    if (!files) {
+      const bytes = await verifyPackage(deps, row.version);
+      files = new Map(unpackFiles(bytes).filter((f) => listingAssetPaths(row.version.manifest as Manifest).includes(f.path)).map((f) => [f.path, f.content]));
+      if (assetCache.size > 200) assetCache.clear();
+      assetCache.set(row.version.id, files);
+    }
+    const file = files.get(path);
+    if (!file) throw notFound("asset not found");
+    const ext = path.split(".").pop()!.toLowerCase();
+    const type = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", svg: "image/svg+xml" }[ext]!;
+    return reply
+      .header("content-type", type)
+      .header("x-content-type-options", "nosniff")
+      .header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox")
+      .header("cache-control", "public, max-age=31536000, immutable") // versioned URL
+      .send(file);
+  });
 
   app.get(
     "/store/apps",
@@ -172,6 +248,18 @@ export async function storeRoutes(app: App, deps: Deps) {
       permissionLines: describePermissions(m),
       prices: ps.map((p) => ({ id: p.id, lookupKey: p.lookupKey, kind: p.kind, unit: p.unit, unitAmountCents: p.unitAmountCents, interval: p.interval, includedUnits: p.includedUnits, label: priceLabel(p) })),
       reviews: rv.map((r) => ({ ...r, name: r.name ?? "AIX user" })),
+      rating: await (async () => {
+        const [x] = await deps.db.select({ avg: avg(reviews.rating), n: count() }).from(reviews).where(eq(reviews.appId, a.id));
+        return x?.n ? { average: Number(Number(x.avg).toFixed(1)), count: x.n } : null;
+      })(),
+      installs: (await installCounts(deps, [a.id])).get(a.id) ?? 0,
+      ...listing(deps, a, v),
+      related: await (async () => {
+        const same = (await storeSearch(deps, { category: a.category, limit: 8 })).filter((x) => x.id !== a.id);
+        if (same.length >= 3) return same.slice(0, 6);
+        const more = (await storeSearch(deps, { limit: 30 })).filter((x) => x.id !== a.id && !same.some((s) => s.id === x.id)).sort((x, y) => y.installs - x.installs);
+        return [...same, ...more].slice(0, 6);
+      })(),
       me: mine,
     };
   });
