@@ -8,16 +8,18 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run test",
+    "test": "turbo run test --concurrency=1",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @aix/db db:migrate",
     "seed": "pnpm --filter @aix/api seed",
-    "keys:generate": "pnpm --filter @aix/api keys:generate"
+    "keys:generate": "pnpm --filter @aix/api keys:generate",
+    "e2e": "playwright test --trace off"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "^22.20.5",
     "tsx": "^4.23.15",
     "turbo": "^2.5.0",

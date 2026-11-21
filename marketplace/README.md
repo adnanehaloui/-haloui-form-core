@@ -1,3 +1,6 @@
 # Claude Code plugin marketplace export
 
-Generated in M4 from published `prompt` apps. Will contain `.claude-plugin/marketplace.json` so users can run `/plugin marketplace add`.
+Generated from published `prompt` apps: `pnpm --filter @aix/api job:export-marketplace`.
+Produces `.claude-plugin/marketplace.json` and `plugins/<slug>/{.claude-plugin/plugin.json, skills/*/SKILL.md}`.
+
+In Claude Code: `/plugin marketplace add <path or git URL of this folder>` then `/plugin install <slug>@aix`.

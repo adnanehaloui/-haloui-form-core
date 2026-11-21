@@ -10,7 +10,9 @@ import { redact } from "@aix/core";
 import { loadConfig, type Config } from "./config.js";
 import type { App, Deps } from "./context.js";
 import { ApiError } from "./lib/errors.js";
-import { createSigner } from "./lib/keys.js";
+import { createSigner, generateSigningKeyPem } from "./lib/keys.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { memoryMailer, smtpMailer } from "./lib/mailer.js";
 import { FakePayments, stripePayments } from "./lib/payments.js";
 import { fsStorage } from "./lib/storage.js";
@@ -18,6 +20,18 @@ import { PaymentsUnavailableError } from "./lib/payments.js";
 import { registerRoutes } from "./routes/index.js";
 
 
+
+/** Dev convenience: without AIX_SIGNING_PRIVATE_KEY, persist one generated key under AIX_STORAGE_DIR. */
+function signingKey(config: Config): string | undefined {
+  if (config.AIX_SIGNING_PRIVATE_KEY || config.NODE_ENV !== "development") return config.AIX_SIGNING_PRIVATE_KEY;
+  const file = join(config.AIX_STORAGE_DIR, "dev-signing-key.pem");
+  if (!existsSync(file)) {
+    mkdirSync(config.AIX_STORAGE_DIR, { recursive: true });
+    writeFileSync(file, generateSigningKeyPem(), { mode: 0o600 });
+    console.warn(`[aix] generated a development signing key at ${file} (set AIX_SIGNING_PRIVATE_KEY for real deployments)`);
+  }
+  return readFileSync(file, "utf8");
+}
 
 export function buildDeps(config: Config = loadConfig(), overrides: Partial<Deps> = {}): Deps & { close: () => Promise<void> } {
   const { db, close } = overrides.db ? { db: overrides.db, close: async () => {} } : createDb(config.DATABASE_URL);
@@ -30,7 +44,7 @@ export function buildDeps(config: Config = loadConfig(), overrides: Partial<Deps
       : config.AIX_DEV_ENDPOINTS
         ? new FakePayments(`${config.AIX_WEB_URL}/dev-checkout`)
         : null,
-    signer: createSigner(config.AIX_SIGNING_PRIVATE_KEY, (m) => console.warn(`[aix] ${m}`)),
+    signer: createSigner(signingKey(config), (m) => console.warn(`[aix] ${m}`)),
     storage: fsStorage(config.AIX_STORAGE_DIR),
     now: () => new Date(),
     ...overrides,

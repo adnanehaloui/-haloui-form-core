@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #16161b;
+  --color-muted: #6b6b76;
+  --color-line: #e4e4ea;
+  --color-card: #f6f6f9;
+  --color-accent: #4f46e5;
+  --color-accent-ink: #ffffff;
+  --color-good: #15803d;
+  --color-bad: #b91c1c;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-ink: #ececf1;
+    --color-muted: #a1a1ad;
+    --color-line: #2e2e37;
+    --color-card: #1b1b21;
+    --color-accent: #818cf8;
+    --color-accent-ink: #111114;
+    --color-good: #4ade80;
+    --color-bad: #f87171;
+  }
+}
+
+body { background: light-dark(#ffffff, #111114); color: var(--color-ink); color-scheme: light dark; }
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 cursor-pointer border-line hover:bg-card; }
+  .btn-primary { @apply inline-flex items-center justify-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition disabled:opacity-50 cursor-pointer border-accent bg-accent text-accent-ink hover:opacity-90; }
+  .input { @apply w-full rounded-lg border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-accent; }
+  .card { @apply rounded-2xl border border-line bg-card p-5; }
+  .label { @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted; }
+  .h1 { @apply text-2xl font-semibold tracking-tight; }
+  .h2 { @apply text-lg font-semibold; }
+  .muted { @apply text-sm text-muted; }
+  .table { @apply w-full text-sm; }
+  .table td, .table th { @apply border-t border-line py-2 pr-3 text-left align-top; }
+  .table th { @apply text-xs font-medium uppercase tracking-wide text-muted; }
+  .pill { @apply inline-block rounded-full border border-line px-2 py-0.5 text-xs text-muted; }
+}

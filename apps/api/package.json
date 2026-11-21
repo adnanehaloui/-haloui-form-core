@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Fastify REST API (Zod schemas → OpenAPI), auth, OAuth 2.1 provider, wallet/ledger, Stripe webhooks, jobs.",
+  "description": "Fastify REST API (Zod schemas \u2192 OpenAPI), auth, OAuth 2.1 provider, wallet/ledger, Stripe webhooks, jobs.",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../../.env src/server.ts",
     "start": "tsx --env-file-if-exists=../../.env src/server.ts",
@@ -16,7 +16,8 @@
     "job:expire-holds": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts expire-holds",
     "job:export-marketplace": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts export-marketplace",
     "keys:generate": "tsx src/scripts/generate-keys.ts",
-    "seed": "tsx --env-file-if-exists=../../.env src/scripts/seed.ts"
+    "seed": "tsx --env-file-if-exists=../../.env src/scripts/seed.ts",
+    "demo:charge": "tsx --env-file-if-exists=../../.env --env-file-if-exists=../../.env.seed src/scripts/charge-demo.ts"
   },
   "dependencies": {
     "@aix/core": "workspace:*",

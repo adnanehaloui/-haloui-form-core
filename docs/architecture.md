@@ -1,4 +1,4 @@
-# AIX architecture (M0 plan)
+# AIX architecture
 
 ## 1. Repo structure
 
@@ -178,3 +178,28 @@ sequenceDiagram
 | Gateway → API | internal service credential + user context | read balances/installs/policies, create approval requests, audit |
 | Developer server → API | `sk_test_…` secret key (scoped) | verify user tokens, entitlements, **hold/capture/release**, usage |
 | Stripe → API | webhook signature | top-ups, invoices, Connect events |
+
+## 6. A paid tool call through the gateway
+
+```mermaid
+sequenceDiagram
+  participant H as AI host (Claude)
+  participant G as AIX gateway
+  participant A as AIX API
+  participant D as Developer MCP server
+  H->>G: tools/call render-studio__render (Bearer AIX token)
+  G->>A: POST /gateway/calls (install? org policy? caps?)
+  A-->>G: runId + 5-min user token
+  G->>D: tools/call render (X-AIX-User-Token, X-AIX-Run-Id)
+  D->>A: auth.verify, wallet.hold (secret key, idempotencyKey = runId)
+  A-->>D: 402 needs_user_approval (€0.50 > threshold)
+  D-->>G: isError + approvalId
+  G-->>H: "call aix_approve"
+  H->>G: aix_approve → approval panel (nonce in _meta)
+  Note over H: user clicks Approve
+  H->>G: approval_decide (nonce) → re-run with same runId
+  G->>D: tools/call render (same run id)
+  D->>A: hold (pre-approved) → work → capture
+  G->>A: POST /gateway/calls/:runId/complete (audit + receipts)
+  G-->>H: result + "AIX receipt: €0.50"
+```
