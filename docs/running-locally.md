@@ -87,3 +87,14 @@ pnpm --filter @aix/api job:payouts -- 2026-10    # monthly, after invoices
 pnpm --filter @aix/api job:export-marketplace    # after each approval
 ```
 All jobs are idempotent and safe to re-run.
+
+## 7. Operations
+
+- **Worker:** `pnpm --filter @aix/api worker` (or the `worker` container) runs scheduled jobs. Run as many as you
+  like; a Postgres advisory lock lets one run at a time and `job_runs` makes monthly jobs exactly-once.
+- **Storage:** `AIX_STORAGE=s3` + `S3_*` for AWS S3, Cloudflare R2 or MinIO (signed requests, no SDK).
+- **Monitoring:** `GET /metrics` (Prometheus, `Authorization: Bearer $AIX_METRICS_TOKEN`) — request counts and
+  latency per route, ledger balance check, open holds, pending approvals, open reports/disputes, 24h revenue.
+  `GET /health/ready` checks the database. Alert on `aix_ledger_balanced == 0` (should never happen).
+- **Backups:** `scripts/backup.sh` (pg_dump, verified, retention, optional S3 copy) — the `backup` container runs
+  it daily. Restore into an empty database with `scripts/restore.sh <file>`; it checks the ledger balances.

@@ -19,6 +19,16 @@ const schema = z.object({
   /** Ed25519 private key, PKCS#8 PEM (\n-escaped ok). Signs OAuth tokens, AIX user tokens and app packages. */
   AIX_SIGNING_PRIVATE_KEY: z.string().optional(),
   AIX_STORAGE_DIR: z.string().default("./.storage"),
+  /** "fs" (local disk, default) or "s3" (AWS S3 / Cloudflare R2 / MinIO). */
+  AIX_STORAGE: z.enum(["fs", "s3"]).default("fs"),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default("auto"),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: bool,
+  /** Bearer token required for /metrics (always required in production). */
+  AIX_METRICS_TOKEN: z.string().optional(),
   /** Git URL (or path) of the exported Claude Code plugin marketplace (`job:export-marketplace`), if published. */
   AIX_PLUGIN_MARKETPLACE_URL: z.string().optional(),
   AIX_MAILER: z.enum(["smtp", "memory"]).default("smtp"),
@@ -51,6 +61,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       if (!c[k]) throw new Error(`${k} is required in production`);
     }
     if (c.AIX_DEV_ENDPOINTS) throw new Error("AIX_DEV_ENDPOINTS must be off in production");
+    if (c.AIX_STORAGE === "s3" && (!c.S3_BUCKET || !c.S3_ACCESS_KEY_ID || !c.S3_SECRET_ACCESS_KEY)) throw new Error("S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required with AIX_STORAGE=s3");
+    if (!c.AIX_METRICS_TOKEN) throw new Error("AIX_METRICS_TOKEN is required in production (protects /metrics)");
     if (c.STRIPE_SECRET_KEY?.startsWith("sk_live_")) throw new Error("Live Stripe keys are not allowed yet (test mode only)");
   }
   return { ...c, adminEmails: new Set(c.AIX_ADMIN_EMAILS.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)) };

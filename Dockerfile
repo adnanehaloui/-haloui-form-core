@@ -2,6 +2,7 @@
 #   docker build --target api -t aix-api .
 #   docker build --target gateway -t aix-gateway .
 #   docker build --target web --build-arg AIX_API_URL=http://api:4000 -t aix-web .
+#   docker build --target worker -t aix-worker .   docker build --target backup -t aix-backup .
 FROM node:22-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
@@ -20,6 +21,15 @@ WORKDIR /repo/apps/api
 EXPOSE 4000
 USER node
 CMD ["node", "--import", "tsx", "src/server.ts"]
+
+# --- Background worker: scheduled jobs (holds expiry, invoices, payouts, marketplace export) ---
+FROM api AS worker
+CMD ["node", "--import", "tsx", "src/worker.ts"]
+
+# --- Nightly Postgres backups ---
+FROM postgres:16 AS backup
+COPY scripts/backup.sh /usr/local/bin/aix-backup
+CMD ["sh", "-c", "while true; do aix-backup || echo 'backup failed'; sleep 86400; done"]
 
 # --- One-shot database migrations ---
 FROM deps AS migrate

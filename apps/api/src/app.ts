@@ -16,8 +16,10 @@ import { join } from "node:path";
 import { memoryMailer, smtpMailer } from "./lib/mailer.js";
 import { FakePayments, stripePayments } from "./lib/payments.js";
 import { fsStorage } from "./lib/storage.js";
+import { s3Storage } from "./lib/s3.js";
 import { PaymentsUnavailableError } from "./lib/payments.js";
 import { registerRoutes } from "./routes/index.js";
+import { registerMetrics } from "./lib/metrics.js";
 
 
 
@@ -45,7 +47,17 @@ export function buildDeps(config: Config = loadConfig(), overrides: Partial<Deps
         ? new FakePayments(`${config.AIX_WEB_URL}/dev-checkout`)
         : null,
     signer: createSigner(signingKey(config), (m) => console.warn(`[aix] ${m}`)),
-    storage: fsStorage(config.AIX_STORAGE_DIR),
+    storage:
+      config.AIX_STORAGE === "s3"
+        ? s3Storage({
+            endpoint: config.S3_ENDPOINT ?? "https://s3.amazonaws.com",
+            region: config.S3_REGION,
+            bucket: config.S3_BUCKET ?? "",
+            accessKeyId: config.S3_ACCESS_KEY_ID ?? "",
+            secretAccessKey: config.S3_SECRET_ACCESS_KEY ?? "",
+            forcePathStyle: config.S3_FORCE_PATH_STYLE,
+          })
+        : fsStorage(config.AIX_STORAGE_DIR),
     now: () => new Date(),
     ...overrides,
   };
@@ -115,6 +127,7 @@ export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}) {
   });
 
   app.get("/health", { schema: { hide: true } }, async () => ({ ok: true }));
+  registerMetrics(app as App, deps);
   await registerRoutes(app as App, deps);
   return app;
 }

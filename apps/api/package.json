@@ -17,7 +17,8 @@
     "job:export-marketplace": "tsx --env-file-if-exists=../../.env src/jobs/cli.ts export-marketplace",
     "keys:generate": "tsx src/scripts/generate-keys.ts",
     "seed": "tsx --env-file-if-exists=../../.env src/scripts/seed.ts",
-    "demo:charge": "tsx --env-file-if-exists=../../.env --env-file-if-exists=../../.env.seed src/scripts/charge-demo.ts"
+    "demo:charge": "tsx --env-file-if-exists=../../.env --env-file-if-exists=../../.env.seed src/scripts/charge-demo.ts",
+    "worker": "tsx --env-file-if-exists=../../.env src/worker.ts"
   },
   "dependencies": {
     "@aix/core": "workspace:*",
@@ -41,7 +42,10 @@
   "devDependencies": {
     "@aix/cli": "workspace:*",
     "@aix/sdk": "workspace:*",
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@smithy/signature-v4": "^5.7.5",
     "@types/nodemailer": "^8.0.2",
-    "@types/pdfkit": "^0.17.7"
+    "@types/pdfkit": "^0.17.7",
+    "s3rver": "^3.7.1"
   }
 }
