@@ -115,6 +115,31 @@ async function installCounts(deps: Deps, appIds: string[]) {
   return new Map(rows.map((r) => [r.appId, r.n]));
 }
 
+// ---- Full-text search (GIN index in migrations/0004_search_index.sql) --------------------------
+const searchDoc = sql`(setweight(to_tsvector('simple', coalesce(${apps.name}, '')), 'A') || setweight(to_tsvector('english', coalesce(${apps.description}, '')), 'B') || setweight(to_tsvector('simple', coalesce(${apps.category}, '')), 'C'))`;
+const STOPWORDS = new Set("a an and are as at be by can do for from get help how i in is it make me my of on or our please some that the this to want we what with you your".split(" "));
+/** "vid edit" → 'vid:* | edit:*' — prefix match while typing, any word matches, ranking rewards more words. */
+function prefixQuery(q: string) {
+  const all = q.toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const meaningful = all.filter((w) => !STOPWORDS.has(w));
+  const words = (meaningful.length ? meaningful : all).slice(0, 8);
+  return words.length ? words.map((w) => `${w}:*`).join(" | ") : null;
+}
+function searchMatch(q: string) {
+  const pq = prefixQuery(q);
+  return or(
+    pq ? sql`${searchDoc} @@ to_tsquery('simple', ${pq})` : undefined,
+    pq ? sql`${searchDoc} @@ to_tsquery('english', ${pq})` : undefined,
+    ilike(sql`${appVersions.manifest}->>'tagline'`, `%${q}%`),
+    // Typos: "brnad" → Brand Kit Studio (pg_trgm word similarity on the name).
+    sql`word_similarity(${q.toLowerCase()}, lower(${apps.name})) >= 0.3`,
+  );
+}
+function searchRank(q: string) {
+  const pq = prefixQuery(q);
+  return sql`(${pq ? sql`ts_rank(${searchDoc}, to_tsquery('simple', ${pq})) + ts_rank(${searchDoc}, to_tsquery('english', ${pq}))` : sql`0`} + word_similarity(${q.toLowerCase()}, lower(${apps.name})) + (case when lower(${apps.name}) like ${q.toLowerCase().replace(/[%_]/g, "") + "%"} then 1 else 0 end))`;
+}
+
 export async function storeSearch(deps: Deps, q: { q?: string | undefined; category?: string | undefined; type?: string | undefined; host?: string | undefined; limit?: number }) {
   const rows = await deps.db
     .select({ app: apps, version: appVersions, developer: developers.displayName })
@@ -124,13 +149,13 @@ export async function storeSearch(deps: Deps, q: { q?: string | undefined; categ
     .where(
       and(
         eq(apps.status, "published"),
-        q.q ? or(ilike(apps.name, `%${q.q}%`), ilike(apps.description, `%${q.q}%`), ilike(apps.category, `%${q.q}%`)) : undefined,
+        q.q ? searchMatch(q.q) : undefined,
         q.category ? eq(apps.category, q.category) : undefined,
         q.type ? eq(apps.type, q.type as any) : undefined,
         q.host ? sql`${appVersions.manifest}->'compatibility'->'hosts' ? ${q.host}` : undefined,
       ),
     )
-    .orderBy(desc(apps.createdAt))
+    .orderBy(...(q.q ? [desc(searchRank(q.q)), desc(apps.createdAt)] : [desc(apps.createdAt)]))
     .limit(q.limit ?? 50);
   const counts = await installCounts(deps, rows.map((r) => r.app.id));
   const out = [];

@@ -58,3 +58,14 @@ describe("storefront", () => {
     expect((await ctx.app.inject({ method: "GET", url: path.replace("assets/icon.svg", "aix.json") })).statusCode).toBe(404);
   });
 });
+
+describe("search", () => {
+  it("prefix, any-word, typo-tolerant and injection-safe", async () => {
+    const names = async (q: string) => (await ctx.app.inject({ method: "GET", url: `/store/apps?q=${encodeURIComponent(q)}` })).json().data.map((a: any) => a.name);
+    expect(await names("pitc")).toEqual(["Pitch Writer"]);
+    expect(await names("write a pitch")).toEqual(["Pitch Writer"]);
+    expect(await names("ptich writer")).toEqual(["Pitch Writer"]);
+    expect(await names("'; drop table apps; --")).toEqual([]);
+    expect(await names("zzzzqqq")).toEqual([]);
+  });
+});

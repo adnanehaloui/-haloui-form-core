@@ -15,6 +15,7 @@ import { billingRoutes } from "./billing.js";
 import { orgAdminRoutes } from "./org-admin.js";
 import { installRoutes } from "./install.js";
 import { trustRoutes } from "./trust.js";
+import { workflowRoutes } from "./workflows.js";
 
 export async function registerRoutes(app: App, deps: Deps) {
   await authRoutes(app, deps);
@@ -33,5 +34,6 @@ export async function registerRoutes(app: App, deps: Deps) {
   await orgAdminRoutes(app, deps);
   await installRoutes(app, deps);
   await trustRoutes(app, deps);
+  await workflowRoutes(app, deps);
   if (deps.config.AIX_DEV_ENDPOINTS) await devRoutes(app, deps);
 }

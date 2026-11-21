@@ -245,4 +245,27 @@ describe("M4 — gateway with OAuth, proxied tools, approval and receipt", () =>
     expect((p.messages[0]!.content as any).text).toContain("Changelog entry");
     await c.close();
   });
+
+  it("workflows chain installed apps and run in the user's AI", async () => {
+    const bad = await ctx.app.inject({ method: "POST", url: "/me/workflows", headers: { cookie: userCookie }, payload: { name: "Nope", steps: [{ app: "not-installed", instruction: "do it" }] } });
+    expect(bad.json().error.message).toContain("install these apps first");
+    const w = await ctx.app.inject({
+      method: "POST",
+      url: "/me/workflows",
+      headers: { cookie: userCookie },
+      payload: { name: "Launch kit", description: "Announcement + teaser video", steps: [{ app: "launch-copy", tool: "launch-announcement", instruction: "Write the launch post" }, { app: slug, tool: "render", instruction: "Turn the post into a storyboard" }] },
+    });
+    expect(w.json().slug).toBe("launch-kit");
+    const c = await mcp();
+    expect((await c.listPrompts()).prompts.map((p) => p.name)).toContain("workflow__launch-kit");
+    const tool = (await c.listTools()).tools.find((t) => t.name === "workflow_run")!;
+    expect(tool.description).toContain("launch-kit — Launch kit");
+    const r: any = await c.callTool({ name: "workflow_run", arguments: { name: "launch-kit" } });
+    const plan = r.content[0].text as string;
+    expect(plan).toContain("# Workflow: Launch kit");
+    expect(plan).toContain("skill_load");
+    expect(plan).toContain(`\`${slug}__render\``);
+    expect(plan).toContain("never approve for them");
+    await c.close();
+  });
 });

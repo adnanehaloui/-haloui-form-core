@@ -175,9 +175,20 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
 
   type SkillRow = { app: string; appName: string; name: string; description: string; content: string };
   const listSkills = async () => (await api.get<{ data: SkillRow[] }>("/gateway/skills")).data;
+  type WorkflowRow = { slug: string; name: string; description: string; promptName: string; rendered: string };
+  const listWorkflows = async () => (await api.get<{ data: WorkflowRow[] }>("/me/workflows")).data;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const skills = await listSkills().catch(() => [] as SkillRow[]);
+    const [skills, flows] = await Promise.all([listSkills().catch(() => [] as SkillRow[]), listWorkflows().catch(() => [] as WorkflowRow[])]);
+    const flowTool: Tool[] = flows.length
+      ? [{
+          name: "workflow_run",
+          title: "Run one of my AIX workflows",
+          description: `Get the step-by-step plan of a workflow the user built on AIX, then carry it out with their installed apps. Available: ${flows.map((f) => `${f.slug} — ${f.name}`).join("; ")}`,
+          inputSchema: { type: "object", properties: { name: { type: "string", enum: flows.map((f) => f.slug) } }, required: ["name"] },
+          annotations: { readOnlyHint: true },
+        }]
+      : [];
     const skillTool: Tool[] = skills.length
       ? [{
           name: "skill_load",
@@ -187,14 +198,22 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
           annotations: { readOnlyHint: true },
         }]
       : [];
-    return { tools: [...BUILTIN_TOOLS, ...skillTool, ...(await listAppTools())] };
+    return { tools: [...BUILTIN_TOOLS, ...skillTool, ...flowTool, ...(await listAppTools())] };
   });
 
   // Skills (prompt apps) are also exposed as MCP prompts, for hosts that surface prompts as slash-commands.
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({
-    prompts: (await listSkills()).map((s) => ({ name: s.name, title: `${s.appName}: ${s.name.split("__")[1]}`, description: s.description })),
+    prompts: [
+      ...(await listSkills()).map((s) => ({ name: s.name, title: `${s.appName}: ${s.name.split("__")[1]}`, description: s.description })),
+      ...(await listWorkflows().catch(() => [])).map((f) => ({ name: f.promptName, title: `Workflow: ${f.name}`, description: f.description })),
+    ],
   }));
   server.setRequestHandler(GetPromptRequestSchema, async ({ params }) => {
+    if (params.name.startsWith("workflow__")) {
+      const f = (await listWorkflows()).find((x) => x.promptName === params.name);
+      if (!f) throw new Error(`workflow ${params.name} not found`);
+      return { description: f.description, messages: [{ role: "user", content: { type: "text", text: f.rendered } }] };
+    }
     const s = (await listSkills()).find((x) => x.name === params.name);
     if (!s) throw new Error(`skill ${params.name} is not installed`);
     return { description: s.description, messages: [{ role: "user", content: { type: "text", text: s.content } }] };
@@ -226,6 +245,11 @@ export function buildGatewayServer(cfg: GatewayConfig, user: UserContext) {
     const args = (params.arguments ?? {}) as Record<string, any>;
     try {
       switch (params.name) {
+        case "workflow_run": {
+          const f = (await listWorkflows()).find((x) => x.slug === args.name);
+          if (!f) return errorResult(`Workflow ${args.name} not found. The user can build workflows at AIX → Workflows.`);
+          return { content: [text(f.rendered)] };
+        }
         case "skill_load": {
           const s = (await listSkills()).find((x) => x.name === args.name);
           if (!s) return errorResult(`Skill ${args.name} is not installed. Use store_search / app_install to add skills.`);
