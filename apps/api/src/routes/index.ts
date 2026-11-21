@@ -8,7 +8,9 @@ import { webhookRoutes } from "./webhooks.js";
 import { devRoutes } from "./dev.js";
 import { developerRoutes } from "./developer.js";
 import { adminRoutes } from "./admin.js";
-import { storeRoutes } from "./store.js";
+import { marketplaceRoutes, storeRoutes } from "./store.js";
+import { oauthRoutes } from "./oauth.js";
+import { gatewayRoutes } from "./gateway.js";
 
 export async function registerRoutes(app: App, deps: Deps) {
   await authRoutes(app, deps);
@@ -20,5 +22,8 @@ export async function registerRoutes(app: App, deps: Deps) {
   await developerRoutes(app, deps);
   await adminRoutes(app, deps);
   await storeRoutes(app, deps);
+  await marketplaceRoutes(app, deps);
+  await oauthRoutes(app, deps);
+  await gatewayRoutes(app, deps);
   if (deps.config.AIX_DEV_ENDPOINTS) await devRoutes(app, deps);
 }

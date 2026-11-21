@@ -58,7 +58,7 @@ export async function getUser(deps: Deps, req: FastifyRequest): Promise<UserAuth
   const token = bearer(req);
   if (token && !token.startsWith("aixsk_")) {
     try {
-      const p = await deps.signer.verifyJwt(token, { audience: [deps.config.AIX_GATEWAY_URL, deps.config.AIX_API_URL], issuer: deps.config.AIX_API_URL });
+      const p = await deps.signer.verifyJwt(token, { audience: [`${deps.config.AIX_GATEWAY_URL.replace(/\/$/, "")}/mcp`, deps.config.AIX_GATEWAY_URL, deps.config.AIX_API_URL], issuer: deps.config.AIX_API_URL });
       const scopes = String(p.scope ?? "").split(" ").filter(Boolean);
       if (p.sub && p.token_use === "access" && scopes.includes("aix:gateway")) {
         const [u] = await deps.db.select().from(users).where(eq(users.id, p.sub));

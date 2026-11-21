@@ -113,6 +113,7 @@ export async function authRoutes(app: App, deps: Deps) {
     return {
       user: { id: user!.id, email: user!.email, name: user!.name, createdAt: user!.createdAt },
       isAdmin: auth.isAdmin,
+      webUrl: deps.config.AIX_WEB_URL,
       wallet: { id: wallet.id, currency: wallet.currency, ...(await walletBalance(deps.db, wallet.id)) },
       orgs,
       developer: developer ?? null,

@@ -132,7 +132,7 @@ export class AIX {
     try {
       res = await this.fetchImpl(this.apiUrl + path, {
         method,
-        headers: { authorization: `Bearer ${this.secretKey}`, "content-type": "application/json", "user-agent": "aix-sdk-node/0.1.0" },
+        headers: { authorization: `Bearer ${this.secretKey}`, "user-agent": "aix-sdk-node/0.1.0", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(this.timeoutMs),
       });

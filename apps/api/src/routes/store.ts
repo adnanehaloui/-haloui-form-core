@@ -262,3 +262,9 @@ export async function storeRoutes(app: App, deps: Deps) {
     },
   );
 }
+
+export async function marketplaceRoutes(app: App, deps: Deps) {
+  const { buildMarketplace } = await import("../services/marketplace.js");
+  /** The Claude Code marketplace manifest (the file export is what `/plugin marketplace add` reads). */
+  app.get("/marketplace/claude-code.json", { schema: { tags: ["store"] } }, async () => (await buildMarketplace(deps)).marketplace);
+}

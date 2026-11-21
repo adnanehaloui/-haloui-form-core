@@ -6,6 +6,7 @@ import { handleStripeEvent } from "../services/stripe-events.js";
 export async function webhookRoutes(app: App, deps: Deps) {
   // Encapsulated so only this route receives the raw body (needed for signature verification).
   await app.register(async (scope) => {
+    scope.removeContentTypeParser("application/json");
     scope.addContentTypeParser("application/json", { parseAs: "buffer" }, (_req, body, done) => done(null, body));
     scope.post("/webhooks/stripe", { schema: { tags: ["webhooks"], hide: false } }, async (req, reply) => {
       if (!deps.payments) throw new PaymentsUnavailableError();

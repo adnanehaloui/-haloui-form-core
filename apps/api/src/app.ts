@@ -55,6 +55,17 @@ export async function buildApp(deps: Deps, opts: { logger?: boolean } = {}) {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  // Accept empty JSON bodies (e.g. POST /v1/holds/:id/capture with a content-type but no body).
+  app.removeContentTypeParser("application/json");
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    if (body === "") return done(null, undefined);
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (e: any) {
+      e.statusCode = 400;
+      done(e, undefined);
+    }
+  });
   await app.register(cookie);
   await app.register(formbody);
   await app.register(rateLimit, { max: deps.config.NODE_ENV === "test" ? 10_000 : 300, timeWindow: "1 minute" });
