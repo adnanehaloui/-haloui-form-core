@@ -1,0 +1,12 @@
+{
+  "id": "com.example.quicknotes",
+  "name": "Quick Notes",
+  "version": "1.0.0",
+  "type": "web",
+  "description": "A tiny web app that uses Sign in with AIX and charges €0.20 per AI summary from the AIX wallet.",
+  "category": "productivity",
+  "entry": { "web": "http://localhost:4300" },
+  "compatibility": { "hosts": ["web"] },
+  "permissions": { "network": [], "files": [], "userData": ["email", "name"] },
+  "pricing": [{ "kind": "metered", "unit": "summary", "displayPrice": "€0.20" }]
+}

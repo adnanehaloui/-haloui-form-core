@@ -1,0 +1,12 @@
+{
+  "id": "com.example.launchcopy",
+  "name": "Launch Copy",
+  "version": "1.0.0",
+  "type": "prompt",
+  "description": "Skills for writing product launch announcements, changelogs and release emails.",
+  "category": "writing",
+  "compatibility": { "hosts": ["claude", "claude-code", "chatgpt", "cursor"] },
+  "permissions": { "network": [], "files": [], "userData": [] },
+  "skills": ["skills/launch-announcement.md", "skills/changelog.md"],
+  "pricing": [{ "kind": "free" }]
+}

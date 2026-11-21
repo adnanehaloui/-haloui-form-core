@@ -1,7 +1,14 @@
 {
   "name": "@aix/template-web",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Starter template for a `web` AIX app (used by `aix app init --template web`)."
+  "description": "Web app template: Sign in with AIX (OAuth 2.1 + PKCE) and server-side wallet charges.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@aix/sdk": "workspace:*"
+  }
 }

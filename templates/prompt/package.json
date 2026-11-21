@@ -1,7 +1,1 @@
-{
-  "name": "@aix/template-prompt",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "description": "Starter template for a `prompt` AIX app (used by `aix app init --template prompt`)."
-}
+{ "name": "@aix/template-prompt", "version": "0.1.0", "private": true, "description": "Prompt app template: Markdown skills only, nothing runs on a server." }

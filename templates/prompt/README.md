@@ -1,5 +1,11 @@
-# @aix/template-prompt
+# Prompt app template — Launch Copy
 
-Starter template for a `prompt` AIX app (used by `aix app init --template prompt`).
+`type: prompt` apps contain skills/templates only (Markdown files). Nothing runs on a server.
+Published prompt apps are exported to the AIX **Claude Code plugin marketplace**, so users can
+`/plugin marketplace add` it and install the skills.
 
-_Status: scaffold only (M0). Implementation starts in a later milestone — see `docs/architecture.md`._
+```bash
+aix app init my-skills --template prompt
+aix app validate && aix app publish
+```
+List every skill file in `aix.json → skills`.

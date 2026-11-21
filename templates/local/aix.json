@@ -1,0 +1,12 @@
+{
+  "id": "com.example.repostats",
+  "name": "Repo Stats",
+  "version": "1.0.0",
+  "type": "local",
+  "description": "Counts files and lines of code in a local folder. Runs on your machine; nothing is uploaded.",
+  "category": "code",
+  "entry": { "command": "bin/repo-stats.mjs" },
+  "compatibility": { "hosts": ["claude-code", "cursor"] },
+  "permissions": { "network": [], "files": ["read: current project folder"], "userData": [] },
+  "pricing": [{ "kind": "free" }]
+}

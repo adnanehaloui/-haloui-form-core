@@ -1,0 +1,15 @@
+{
+  "id": "com.example.renderstudio",
+  "name": "Render Studio",
+  "version": "1.0.0",
+  "type": "server",
+  "description": "Turn a short script into a storyboard video render. Sample AIX server app with one paid tool and a preview panel.",
+  "category": "video",
+  "entry": { "mcp": "http://localhost:4200/mcp" },
+  "compatibility": { "hosts": ["claude", "chatgpt", "cursor", "claude-code", "web"] },
+  "permissions": { "network": ["http://localhost:4200"], "files": [], "userData": ["email"] },
+  "pricing": [
+    { "kind": "free", "includedUnits": 3, "unit": "render" },
+    { "kind": "metered", "unit": "render", "displayPrice": "€0.50" }
+  ]
+}

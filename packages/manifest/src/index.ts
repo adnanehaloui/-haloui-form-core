@@ -106,3 +106,4 @@ export function slugify(s: string): string {
 export function manifestJsonSchema() {
   return z.toJSONSchema(manifestSchema, { io: "input" });
 }
+export * from "./package.js";

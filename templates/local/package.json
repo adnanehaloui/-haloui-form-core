@@ -1,7 +1,1 @@
-{
-  "name": "@aix/template-local",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "description": "Starter template for a `local` AIX app (used by `aix app init --template local`)."
-}
+{ "name": "@aix/template-local", "version": "0.1.0", "private": true, "type": "module", "description": "Local app template: code that runs on the user's machine.", "scripts": { "dev": "node bin/repo-stats.mjs ." } }
